@@ -389,7 +389,12 @@ class NewsReelPipeline:
             for role in ("host", "reporter")
         ]
         if expected_h3 and all(path.is_file() for path in expected_h3):
-            return self.reassemble(run_id)
+            try:
+                self._collect_existing_h3(run_dir, scenario)
+            except Exception:
+                pass
+            else:
+                return self.reassemble(run_id)
 
         host_image = run_dir / "images" / "host-plate.png"
         reporter_images = [
@@ -448,6 +453,11 @@ class NewsReelPipeline:
                 clip_count=len(jobs),
                 generation_seconds=round(elapsed, 3),
                 message="Relance full-H3 terminée",
+            )
+            self.store.update(
+                run_id,
+                h3_clip_count=len(jobs),
+                h3_generation_seconds=round(elapsed, 3),
             )
             active_stage = "assembly"
             return self._assemble_existing_h3(run_id, scenario)
