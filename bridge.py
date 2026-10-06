@@ -120,6 +120,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "h3": h3_contract_config(),
         }
 
+    @app.get("/runs")
+    def list_runs(limit: int = 20) -> dict[str, Any]:
+        return {"runs": store.list_runs(limit)}
+
     @app.post("/runs", status_code=202)
     def start_run(body: StartRunRequest) -> dict[str, Any]:
         _validate_creative(body)
