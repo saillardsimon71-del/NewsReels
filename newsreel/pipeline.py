@@ -96,11 +96,11 @@ class NewsReelPipeline:
                 intensity=intensity,
             )
             scenario.host_image_prompt = build_host_image_prompt(
-                scenario.host_dict(), director, palette
+                scenario.host_dict(), director, palette, intensity
             )
             for segment in scenario.segments:
                 segment.reporter_image_prompt = build_reporter_image_prompt(
-                    segment.to_dict(), director, palette
+                    segment.to_dict(), director, palette, intensity
                 )
             scenario_path = run_dir / "scenario.json"
             RunStore.atomic_write_json(scenario_path, scenario.to_dict())
