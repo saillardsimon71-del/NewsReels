@@ -26,6 +26,7 @@ from newsreel.creative import (
 )
 from newsreel.demo import run_offline_demo
 from newsreel.h3_worker_contract import ModalH3Renderer
+from newsreel.h3_workflow import h3_contract_config
 from newsreel.pipeline import NewsReelPipeline
 from newsreel.run_store import RunStore
 
@@ -116,6 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "creative": creative_catalog(),
             "full_h3": True,
             "h3_clips_per_subject": 2,
+            "h3": h3_contract_config(),
         }
 
     @app.post("/runs", status_code=202)
