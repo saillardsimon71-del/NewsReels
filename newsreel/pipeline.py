@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Protocol
@@ -264,6 +265,166 @@ class NewsReelPipeline:
                 self.store.add_error(run_id, str(exc), active_stage)
             except Exception:
                 pass
+            raise
+
+    def _load_scenario(self, run_dir: Path) -> Scenario:
+        scenario_path = run_dir / "scenario.json"
+        if not scenario_path.is_file():
+            raise FileNotFoundError("scenario.json absent pour ce run.")
+        try:
+            payload = json.loads(scenario_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"scenario.json illisible: {exc}") from exc
+        return Scenario.from_mapping(payload)
+
+    def _collect_existing_h3(
+        self, run_dir: Path, scenario: Scenario
+    ) -> tuple[list[Path], list[Path], list[float], list[float]]:
+        host_videos: list[Path] = []
+        reporter_videos: list[Path] = []
+        host_durations: list[float] = []
+        reporter_durations: list[float] = []
+        for index in range(len(scenario.segments)):
+            for role, paths, durations in (
+                ("host", host_videos, host_durations),
+                ("reporter", reporter_videos, reporter_durations),
+            ):
+                path = run_dir / "h3" / f"{role}-{index}.mp4"
+                if not path.is_file():
+                    raise FileNotFoundError(f"Clip H3 manquant: {path.name}")
+                info = probe_media(path, self.settings)
+                if not info.video or not info.audio or info.duration <= 0:
+                    raise RuntimeError(
+                        f"Clip H3 invalide ou sans audio natif: {path.name}."
+                    )
+                paths.append(path)
+                durations.append(info.duration)
+        return host_videos, reporter_videos, host_durations, reporter_durations
+
+    def _assemble_existing_h3(self, run_id: str, scenario: Scenario) -> dict[str, object]:
+        run_dir = self.store.path(run_id)
+        host_plate = run_dir / "images" / "host-plate.png"
+        if not host_plate.is_file():
+            raise FileNotFoundError("Keyframe host absente: images/host-plate.png")
+        host_videos, reporter_videos, host_durations, reporter_durations = (
+            self._collect_existing_h3(run_dir, scenario)
+        )
+        self.store.stage(
+            run_id,
+            "assembly",
+            "running",
+            message="Reconstruction timeline et montage FFmpeg local",
+        )
+        timeline = build_timeline(
+            run_id=run_id,
+            run_dir=run_dir,
+            scenario=scenario,
+            host_plate=host_plate,
+            host_videos=host_videos,
+            reporter_videos=reporter_videos,
+            host_durations=host_durations,
+            reporter_durations=reporter_durations,
+            settings=self.settings,
+        )
+        timeline_path = run_dir / "timeline.json"
+        self.store.register_file(run_id, timeline_path)
+        result = self.assembler.assemble(timeline_path, run_dir)
+        final_path = Path(result["path"])
+        self.store.register_file(run_id, final_path)
+        for relative in result["segment_files"]:
+            self.store.register_file(run_id, run_dir / relative)
+        self.store.stage(
+            run_id,
+            "assembly",
+            "succeeded",
+            scene_count=len(timeline.scenes),
+            final_duration_seconds=result["duration_seconds"],
+            resolution=f"{result['width']}x{result['height']}",
+            fps=result["fps"],
+            audio=result["audio"],
+        )
+        self.store.stage(run_id, "ready", "succeeded", message="JT final prêt")
+        manifest = self.store.read_manifest(run_id)
+        h3_count = len(scenario.segments) * 2
+        self.store.update(
+            run_id,
+            status="complete",
+            final_duration_seconds=result["duration_seconds"],
+            h3_clip_count=h3_count,
+            final_file="newsreel_final.mp4",
+            summary={
+                "title": scenario.title,
+                "subject_count": len(scenario.segments),
+                "h3_clip_count": h3_count,
+                "duration_seconds": result["duration_seconds"],
+                "resolution": f"{result['width']}x{result['height']}",
+                "fps": result["fps"],
+                "creative": scenario.creative,
+                "errors": len(manifest.get("errors", [])),
+            },
+        )
+        return self.store.read_manifest(run_id)
+
+    def rerender_h3(self, run_id: str) -> dict[str, object]:
+        run_dir = self.store.path(run_id)
+        scenario = self._load_scenario(run_dir)
+        host_image = run_dir / "images" / "host-plate.png"
+        reporter_images = [
+            run_dir / "images" / f"reporter-{index}.png"
+            for index in range(len(scenario.segments))
+        ]
+        missing = [path.name for path in [host_image, *reporter_images] if not path.is_file()]
+        if missing:
+            raise FileNotFoundError(f"Keyframes H3 manquantes: {', '.join(missing)}")
+
+        active_stage = "h3"
+        try:
+            jobs = create_h3_jobs(scenario, host_image, reporter_images, self.settings)
+            self.store.stage(
+                run_id,
+                "h3",
+                "running",
+                clip_count=len(jobs),
+                message=f"Relance FastH3 de {len(jobs)} clips",
+            )
+            started = time.perf_counter()
+            result = self.h3_renderer.render_batch(jobs, run_id=run_id)
+            elapsed = result.generation_seconds or (time.perf_counter() - started)
+            for job in jobs:
+                video = result.videos.get(job.id)
+                if not video:
+                    raise RuntimeError(f"Le batch FastH3 n'a pas renvoyé {job.id}.")
+                path = run_dir / "h3" / f"{job.id}.mp4"
+                path.write_bytes(video)
+                self.store.register_file(run_id, path)
+                info = probe_media(path, self.settings)
+                if not info.video or not info.audio or info.duration <= 0:
+                    raise RuntimeError(
+                        f"Clip H3 invalide ou sans audio natif après relance: {path.name}."
+                    )
+            self.store.stage(
+                run_id,
+                "h3",
+                "succeeded",
+                clip_count=len(jobs),
+                generation_seconds=round(elapsed, 3),
+                message="Relance full-H3 terminée",
+            )
+            active_stage = "assembly"
+            return self._assemble_existing_h3(run_id, scenario)
+        except Exception as exc:
+            self.store.stage(run_id, active_stage, "failed", message=str(exc))
+            self.store.add_error(run_id, str(exc), active_stage)
+            raise
+
+    def reassemble(self, run_id: str) -> dict[str, object]:
+        run_dir = self.store.path(run_id)
+        scenario = self._load_scenario(run_dir)
+        try:
+            return self._assemble_existing_h3(run_id, scenario)
+        except Exception as exc:
+            self.store.stage(run_id, "assembly", "failed", message=str(exc))
+            self.store.add_error(run_id, str(exc), "assembly")
             raise
 
     @staticmethod
