@@ -186,6 +186,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "message": "Démo synthétique full-H3 hors-ligne démarrée; aucune requête Agnes/Modal.",
         }
 
+    @app.post("/resume", status_code=202)
+    def resume_run(body: RunActionRequest) -> dict[str, Any]:
+        try:
+            store.path(body.run_id)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        executor.submit(_resume_run, runtime_settings, store, body.run_id)
+        return {
+            "run_id": body.run_id,
+            "status": "queued",
+            "message": "Reprise automatique du run soumise.",
+        }
+
     @app.post("/render-h3-batch", status_code=202)
     def render_h3_batch(body: RunActionRequest) -> dict[str, Any]:
         try:
@@ -282,6 +295,17 @@ def _run_demo(settings: Settings, store: RunStore, run_id: str) -> None:
         return
 
 
+def _resume_run(
+    settings: Settings,
+    store: RunStore,
+    run_id: str,
+) -> None:
+    try:
+        NewsReelPipeline(settings, store=store).resume(run_id)
+    except Exception:
+        return
+
+
 def _rerender_h3_run(
     settings: Settings,
     store: RunStore,
@@ -310,4 +334,9 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("bridge:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=False)
+    uvicorn.run(
+        "bridge:app",
+        host=os.getenv("NEWSREEL_HOST", "127.0.0.1"),
+        port=int(os.getenv("NEWSREEL_PORT", os.getenv("PORT", "8000"))),
+        reload=False,
+    )
