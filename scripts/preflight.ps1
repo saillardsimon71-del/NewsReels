@@ -22,13 +22,29 @@ print("Preflight NewsReel OK")
 '@
 
 $tempScript = Join-Path ([System.IO.Path]::GetTempPath()) ("newsreel-preflight-" + [guid]::NewGuid().ToString("N") + ".py")
+$previousPythonPath = $env:PYTHONPATH
 try {
+    # The temporary script lives outside the repository, so Python would otherwise
+    # put %TEMP% rather than the repo root on sys.path.
+    if ([string]::IsNullOrWhiteSpace($previousPythonPath)) {
+        $env:PYTHONPATH = $root
+    }
+    else {
+        $env:PYTHONPATH = $root + [System.IO.Path]::PathSeparator + $previousPythonPath
+    }
+
     [System.IO.File]::WriteAllText($tempScript, $code, [System.Text.UTF8Encoding]::new($false))
     & $python $tempScript
     if ($LASTEXITCODE -ne 0) {
-        throw "Le preflight Python a échoué avec le code $LASTEXITCODE."
+        throw "Le preflight Python a echoue avec le code $LASTEXITCODE."
     }
 }
 finally {
+    if ($null -eq $previousPythonPath) {
+        Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:PYTHONPATH = $previousPythonPath
+    }
     Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
 }
