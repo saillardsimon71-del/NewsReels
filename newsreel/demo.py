@@ -189,7 +189,6 @@ def run_offline_demo(
             "images",
             "succeeded",
             image_count=4,
-            host_audio_count=0,
             mode="synthetic-fixtures",
         )
         for path in [*host_videos, *reporter_videos]:
