@@ -4,12 +4,16 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -21,5 +25,15 @@ jobs:
         run: python -m pytest -q
       - name: Ruff
         run: ruff check .
-      - name: Compile
+      - name: Compile Python
         run: python -m compileall -q newsreel bridge.py modal_h3.py
+      - name: Check studio JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("web/index.html").read_text(encoding="utf-8")
+          start = html.index("<script>") + len("<script>")
+          end = html.index("</script>", start)
+          Path("/tmp/newsreel-ui.js").write_text(html[start:end], encoding="utf-8")
+          PY
+          node --check /tmp/newsreel-ui.js
