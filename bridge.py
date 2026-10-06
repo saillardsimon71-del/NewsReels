@@ -306,9 +306,10 @@ def _render_h3_run(
     reporter_images: list[Path],
 ) -> None:
     run_dir = store.path(run_id)
-    jobs = create_h3_jobs(scenario, host_image, reporter_images, settings)
-    store.stage(run_id, "h3", "running", clip_count=len(jobs))
+    store.stage(run_id, "h3", "running")
     try:
+        jobs = create_h3_jobs(scenario, host_image, reporter_images, settings)
+        store.stage(run_id, "h3", "running", clip_count=len(jobs))
         result = ModalH3Renderer(
             settings.modal_app_name, settings.modal_function_name
         ).render_batch(jobs, run_id=run_id)

@@ -236,11 +236,12 @@ def apply_creative_postprocessing(
     if not isinstance(host, dict):
         host = deepcopy(DEFAULT_HOST)
         jt["host"] = host
-    for key, default in DEFAULT_HOST.items():
-        if not host.get(key):
-            host[key] = deepcopy(default)
-    if not host.get("host_action"):
-        host["host_action"] = DEFAULT_HOST_FALLBACK_ACTION
+    else:
+        for key in ("name", "description", "plateau", "stanislavski"):
+            if not host.get(key):
+                host[key] = deepcopy(DEFAULT_HOST[key])
+        if not host.get("host_action"):
+            host["host_action"] = DEFAULT_HOST_FALLBACK_ACTION
 
     if len(segments) < seg_count:
         last = deepcopy(segments[-1])
@@ -255,17 +256,23 @@ def apply_creative_postprocessing(
         if not isinstance(segment, dict):
             raise ValueError(f"Segment créatif #{index + 1} invalide.")
         segment["segment_number"] = index + 1
-        segment.setdefault("emotion", DEFAULT_EMOTION)
+        if not segment.get("emotion"):
+            segment["emotion"] = DEFAULT_EMOTION
         reporter = segment.get("reporter")
         if not isinstance(reporter, dict):
             reporter = deepcopy(DEFAULT_REPORTER)
             segment["reporter"] = reporter
         for key, default in DEFAULT_REPORTER.items():
-            reporter.setdefault(key, deepcopy(default))
-        segment.setdefault("host_action", host.get("host_action") or DEFAULT_HOST_FALLBACK_ACTION)
-        segment.setdefault("scene_action", DEFAULT_SCENE_ACTION)
-        segment.setdefault("camera_plan", DEFAULT_CAMERA_PLAN)
-        segment.setdefault("location", DEFAULT_LOCATION)
+            if key not in reporter:
+                reporter[key] = deepcopy(default)
+        if not segment.get("host_action"):
+            segment["host_action"] = host.get("host_action") or DEFAULT_HOST_FALLBACK_ACTION
+        if not segment.get("scene_action"):
+            segment["scene_action"] = DEFAULT_SCENE_ACTION
+        if not segment.get("camera_plan"):
+            segment["camera_plan"] = DEFAULT_CAMERA_PLAN
+        if not segment.get("location"):
+            segment["location"] = DEFAULT_LOCATION
         people = segment.get("people")
         if not isinstance(people, list) or not people:
             segment["people"] = deepcopy(DEFAULT_PEOPLE)

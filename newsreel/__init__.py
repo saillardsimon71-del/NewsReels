@@ -1,3 +1,3 @@
-"""NewsReel V1: local-first automated French news bulletin generation."""
+"""NewsReel V2: creative, local-first French satirical news generation."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
