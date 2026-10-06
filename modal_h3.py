@@ -25,6 +25,7 @@ from newsreel.h3_workflow import (
     H3_MODAL_GPU,
     H3_MODAL_MEMORY_MIB,
     H3_MODAL_TIMEOUT_SECONDS,
+    H3_COMFYUI_REVISION,
     H3_MODEL_FILES,
     H3_STEPS,
     H3_VOLUME_NAME,
@@ -60,8 +61,8 @@ def validate_batch(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", run_id):
         raise ValueError("Identifiant de run invalide pour le batch FastH3.")
     jobs = payload.get("jobs")
-    if not isinstance(jobs, list) or not 1 <= len(jobs) <= 6:
-        raise ValueError("Le worker Modal accepte un batch de un à six reporters.")
+    if not isinstance(jobs, list) or not 1 <= len(jobs) <= 14:
+        raise ValueError("Le worker Modal accepte un batch de un à quatorze clips H3.")
 
     required_per_job = {
         "width": H3_WIDTH,
@@ -442,7 +443,10 @@ if modal is not None:
             index_url="https://download.pytorch.org/whl/cu128",
         )
         .run_commands(
-            f"git clone --depth 1 {COMFYUI_REPOSITORY} /opt/ComfyUI",
+            "git init /opt/ComfyUI",
+            f"git -C /opt/ComfyUI remote add origin {COMFYUI_REPOSITORY}",
+            f"git -C /opt/ComfyUI fetch --depth 1 origin {H3_COMFYUI_REVISION}",
+            f"git -C /opt/ComfyUI checkout --detach {H3_COMFYUI_REVISION}",
             "pip install --no-cache-dir -r /opt/ComfyUI/requirements.txt",
         )
         .env({"NEWSREEL_COMFYUI_DIR": "/opt/ComfyUI"})
