@@ -21,4 +21,14 @@ print(f"Modal OK: {settings.modal_app_name}/{settings.modal_function_name}")
 print("Preflight NewsReel OK")
 '@
 
-& $python -c $code
+$tempScript = Join-Path ([System.IO.Path]::GetTempPath()) ("newsreel-preflight-" + [guid]::NewGuid().ToString("N") + ".py")
+try {
+    [System.IO.File]::WriteAllText($tempScript, $code, [System.Text.UTF8Encoding]::new($false))
+    & $python $tempScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Le preflight Python a échoué avec le code $LASTEXITCODE."
+    }
+}
+finally {
+    Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
+}
