@@ -170,8 +170,13 @@
           <p class="hint">La clé n'est pas écrite dans le scénario ni le manifeste. Vous pouvez aussi définir AGNES_API_KEY dans l'environnement du bridge local.</p>
         </details>
         <div class="actions"><button class="primary" id="startButton">Lancer le JT</button><button class="secondary" id="demoButton">Démo hors-ligne</button></div>
+        <label for="recentRun">Runs récents</label>
+        <div class="two">
+          <select id="recentRun"><option value="">Aucun run chargé</option></select>
+          <button class="secondary" id="loadRunButton">Charger</button>
+        </div>
         <div class="actions"><button class="secondary" id="resumeButton" disabled>Reprendre le run</button><button class="secondary" id="reassembleButton" disabled>Remonter le MP4</button></div>
-        <div class="secure">● Démo : aucune requête Agnes, aucun appel Modal, aucun GPU. Les actions de reprise réutilisent les fichiers déjà présents.</div>
+        <div class="secure">● Démo : aucune requête Agnes, aucun appel Modal, aucun GPU. Les runs restent récupérables après un redémarrage du bridge.</div>
       </aside>
 
       <main class="main">
@@ -243,6 +248,51 @@
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
     return data;
+  }
+  function resetRunPanels() {
+    $("finalBadge").textContent = "EN ATTENTE";
+    $("finalVideo").removeAttribute("src"); $("finalVideo").dataset.run = "";
+    $("finalMeta").className = "final-meta";
+    $("finalMeta").innerHTML = '<div class="empty">Le JT final apparaîtra ici après le montage FFmpeg local.</div>';
+    $("newsPanel").className = "empty"; $("newsPanel").textContent = "En attente du flux…";
+    $("scenarioPanel").className = "empty"; $("scenarioPanel").textContent = "En attente du scénario…";
+    $("imagePanel").className = "empty"; $("imagePanel").textContent = "En attente des images…";
+    $("newsCount").textContent = $("scenarioCount").textContent = $("imageCount").textContent = "En attente";
+    $("clipDebug").replaceChildren();
+    setSteps({});
+    lastSnapshot = "";
+  }
+  async function refreshRecentRuns(selectedRun = activeRun) {
+    const data = await getJson("/runs?limit=20");
+    const select = $("recentRun");
+    select.replaceChildren();
+    const empty = document.createElement("option");
+    empty.value = ""; empty.textContent = data.runs?.length ? "Choisir un run…" : "Aucun run";
+    select.append(empty);
+    (data.runs || []).forEach((run) => {
+      const option = document.createElement("option");
+      option.value = run.run_id;
+      const subjectText = run.requested_subject_count ? ` · ${run.requested_subject_count} sujets` : "";
+      option.textContent = `${run.run_id} · ${run.status}${subjectText}`;
+      option.selected = run.run_id === selectedRun;
+      select.append(option);
+    });
+  }
+  async function loadRun(runId) {
+    if (!runId) return;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    clearNotice();
+    resetRunPanels();
+    activeRun = runId;
+    await updateRun(runId);
+    const manifest = await getJson(`/run/${encodeURIComponent(runId)}`);
+    if (manifest.status === "running" || manifest.status === "queued") {
+      pollTimer = setInterval(() => updateRun(activeRun).catch((error) => {
+        showNotice(error.message); log(error.message);
+      }), 1800);
+    }
+    await refreshRecentRuns(runId);
+    log(`Run chargé: ${runId}`);
   }
   function renderNews(items, runId) {
     if (!Array.isArray(items) || !items.length) return;
@@ -338,15 +388,9 @@
     clearNotice();
     $("startButton").disabled = true; $("demoButton").disabled = true;
     $("resumeButton").disabled = true; $("reassembleButton").disabled = true;
+    resetRunPanels();
     $("finalBadge").textContent = demo ? "DÉMO HORS-LIGNE" : "RUN EN COURS";
-    $("finalVideo").removeAttribute("src"); $("finalVideo").dataset.run = "";
-    $("finalMeta").className = "final-meta";
-    $("finalMeta").innerHTML = '<div class="empty">Le JT final sera présenté ici dès que le montage sera terminé.</div>';
-    $("newsPanel").className = "empty"; $("newsPanel").textContent = "En attente du flux…";
-    $("scenarioPanel").className = "empty"; $("scenarioPanel").textContent = "En attente du scénario…";
-    $("imagePanel").className = "empty"; $("imagePanel").textContent = "En attente des images…";
     $("newsCount").textContent = $("scenarioCount").textContent = $("imageCount").textContent = "En cours";
-    setSteps({}); lastSnapshot = "";
     try {
       const body = demo ? {} : {
         query: $("query").value.trim(), count: Number($("count").value),
@@ -364,6 +408,7 @@
       if (!demo) $("agnesKey").value = "";
       activeRun = data.run_id; $("runLabel").textContent = `${activeRun} · queued`;
       log(`${demo ? "Démo" : "Run Agnes + Modal"} démarré: ${activeRun}`);
+      await refreshRecentRuns(activeRun);
       await updateRun(activeRun);
       pollTimer = setInterval(() => updateRun(activeRun).catch((error) => { showNotice(error.message); log(error.message); }), 1800);
     } catch (error) {
@@ -397,6 +442,9 @@
   }
   $("startButton").addEventListener("click", () => startRun(false));
   $("demoButton").addEventListener("click", () => startRun(true));
+  $("loadRunButton").addEventListener("click", () => loadRun($("recentRun").value).catch((error) => {
+    showNotice(error.message); log(`Chargement impossible: ${error.message}`);
+  }));
   $("resumeButton").addEventListener("click", () => runAction("/resume", "Reprise"));
   $("reassembleButton").addEventListener("click", () => runAction("/assemble", "Remontage"));
   function populateSelect(id, items, selected) {
@@ -427,6 +475,7 @@
     populateSelect("palette", creative.palettes, defaults.palette);
     populateSelect("intensity", creative.intensity, defaults.intensity);
   }).catch((error) => showNotice(error.message));
+  refreshRecentRuns().catch((error) => log(`Runs récents indisponibles: ${error.message}`));
   getJson("/health").then((health) => {
     const mediaReady = health.ffmpeg_available && health.ffprobe_available;
     const liveReady = mediaReady && health.h3_graph_built_in && health.modal_client_installed;
