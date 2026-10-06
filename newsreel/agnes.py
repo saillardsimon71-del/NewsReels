@@ -180,11 +180,22 @@ class AgnesClient:
             if not url:
                 raise AgnesError("Réponse image Agnes sans URL ni b64_json.")
             request = urllib.request.Request(url, headers={"User-Agent": "NewsReel/2.0"})
-            try:
-                with urllib.request.urlopen(request, timeout=180) as image_response:
-                    content = image_response.read()
-            except (urllib.error.URLError, TimeoutError) as exc:
-                raise AgnesError(f"Téléchargement de l'image Agnes échoué: {exc}") from exc
+            content = b""
+            last_error: Exception | None = None
+            for attempt in range(3):
+                try:
+                    with urllib.request.urlopen(request, timeout=180) as image_response:
+                        content = image_response.read()
+                    if content:
+                        break
+                except (urllib.error.URLError, TimeoutError) as exc:
+                    last_error = exc
+                if attempt < 2:
+                    time.sleep(0.75 * (2**attempt))
+            if not content and last_error is not None:
+                raise AgnesError(
+                    f"Téléchargement de l'image Agnes échoué après 3 tentatives: {last_error}"
+                ) from last_error
         if not content:
             raise AgnesError("Agnes a renvoyé une image vide.")
         try:
