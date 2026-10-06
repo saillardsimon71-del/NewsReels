@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>NewsReel — studio JT</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f; --panel: #0c1a2b; --panel-2: #102239; --line: #20364d;
+      --text: #eef5fb; --muted: #8ca2b9; --cyan: #4dd9dd; --blue: #57a8ff;
+      --green: #67d5a7; --yellow: #f4c86a; --red: #ff7f82; --radius: 18px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(ellipse at 12% -15%, #183454 0, transparent 36%), var(--bg); color: var(--text); }
+    button, input, select { font: inherit; }
+    .shell { width: min(1500px, calc(100% - 40px)); margin: 0 auto; padding: 26px 0 64px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; color: #03121c; font-weight: 900; background: linear-gradient(135deg, #6cf0e1, #55a9ff); box-shadow: 0 10px 30px #39bfd233; }
+    .brand h1 { font-size: 18px; letter-spacing: .11em; margin: 0; }
+    .brand p { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+    .health { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--yellow); box-shadow: 0 0 12px currentColor; }
+    .hero { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin: 12px 0 24px; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: .17em; font-size: 11px; font-weight: 750; }
+    .hero h2 { margin: 8px 0 8px; font-size: clamp(27px, 3vw, 40px); letter-spacing: -.04em; }
+    .hero p { margin: 0; color: var(--muted); max-width: 730px; line-height: 1.55; }
+    .quality-chip { border: 1px solid #31526d; background: #10223999; border-radius: 999px; padding: 9px 13px; color: #bed8ef; font-size: 11px; white-space: nowrap; }
+    .layout { display: grid; grid-template-columns: minmax(290px, 365px) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .card { background: linear-gradient(160deg, #0e2033, #0a1726 72%); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 18px 60px #00000020; }
+    .controls { padding: 21px; position: sticky; top: 15px; }
+    .card-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 17px; }
+    .card-heading h3 { margin: 0; font-size: 15px; }
+    .tag { padding: 4px 8px; color: var(--cyan); border: 1px solid #24535b; border-radius: 99px; font-size: 10px; font-weight: 700; }
+    label { display: block; color: #c4d2e0; font-size: 12px; font-weight: 650; margin: 14px 0 7px; }
+    input, select { border: 1px solid #294158; color: var(--text); background: #071422; border-radius: 10px; width: 100%; padding: 11px 12px; outline: none; }
+    input:focus, select:focus { border-color: #4dd9dd; box-shadow: 0 0 0 3px #4dd9dd18; }
+    input::placeholder { color: #607991; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    details { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
+    summary { cursor: pointer; font-size: 12px; font-weight: 700; color: #d4e2ef; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+    summary::after { content: "+"; font-size: 18px; color: var(--cyan); }
+    details[open] summary::after { content: "−"; }
+    .hint { color: #829ab0; font-size: 11px; line-height: 1.45; margin: 8px 0; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 19px; }
+    .primary, .secondary { border: 0; border-radius: 11px; padding: 12px; cursor: pointer; font-weight: 800; font-size: 12px; transition: transform .15s, opacity .15s; }
+    .primary { color: #04131d; background: linear-gradient(110deg, #63e3d3, #68b9ff); }
+    .secondary { color: #d4e9f7; background: #172d44; border: 1px solid #2b4963; }
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:disabled { cursor: wait; opacity: .5; }
+    .secure { display: flex; gap: 7px; align-items: center; font-size: 10px; color: #738aa0; margin-top: 12px; }
+    .main { display: grid; gap: 18px; min-width: 0; }
+    .progress-card { padding: 20px 22px 18px; }
+    .progress-top { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 18px; }
+    .progress-top h3 { font-size: 14px; margin: 0; }
+    #runLabel { color: var(--muted); font-size: 11px; text-align: right; }
+    .steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .step { min-width: 0; border-top: 2px solid #294159; padding-top: 10px; color: #738aa0; font-size: 10px; font-weight: 750; letter-spacing: .025em; }
+    .step .number { display: inline-grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: #182c40; margin-right: 5px; color: #9db2c6; font-size: 10px; }
+    .step.running { border-color: var(--cyan); color: #e7fbfa; }
+    .step.running .number { background: #1b6970; color: #eaffff; box-shadow: 0 0 15px #4dd9dd40; }
+    .step.succeeded { border-color: var(--green); color: #bdf0d8; }
+    .step.succeeded .number { background: #1c5946; color: #c5ffe2; }
+    .step.failed { border-color: var(--red); color: #ffb7b8; }
+    .step.failed .number { background: #683238; color: #fff; }
+    .progress-track { height: 4px; border-radius: 9px; overflow: hidden; background: #13283c; margin-top: 17px; }
+    #progressFill { height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--blue)); transition: width .35s; }
+    .content-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); gap: 18px; align-items: start; }
+    .section-card { padding: 18px; min-height: 180px; }
+    .section-card h3 { font-size: 13px; margin: 0 0 13px; display: flex; justify-content: space-between; align-items: center; }
+    .section-card h3 span { color: var(--muted); font-size: 10px; font-weight: 500; }
+    .empty { border: 1px dashed #2a435a; color: #7590a8; border-radius: 12px; min-height: 105px; display: grid; place-items: center; text-align: center; padding: 18px; font-size: 11px; line-height: 1.5; }
+    .news-list { display: grid; gap: 9px; }
+    .news-item { padding: 10px 11px; border: 1px solid #1e354b; border-radius: 11px; background: #071523; }
+    .news-item a { color: #e4f1fb; text-decoration: none; font-size: 11px; font-weight: 700; line-height: 1.4; }
+    .news-item a:hover { color: var(--cyan); }
+    .news-item small { display: block; color: #768da3; font-size: 10px; margin-top: 5px; }
+    .scenario-list { display: grid; gap: 9px; }
+    .scenario-item { border-left: 2px solid #50d2d5; background: #071523; padding: 10px 11px; border-radius: 0 10px 10px 0; }
+    .scenario-item strong { font-size: 11px; }
+    .scenario-item p { color: #9bb0c3; font-size: 10px; line-height: 1.45; margin: 6px 0 0; }
+    .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .thumb { overflow: hidden; background: #071523; border: 1px solid #223a50; border-radius: 10px; aspect-ratio: 9/14; }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .final-card { padding: 20px; }
+    .final-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .final-header h3 { margin: 0; font-size: 16px; letter-spacing: -.01em; }
+    .ready-badge { color: #b6f1d3; border: 1px solid #2d7058; background: #133728; border-radius: 99px; padding: 6px 10px; font-size: 10px; font-weight: 800; }
+    .final-layout { display: grid; grid-template-columns: minmax(220px, 340px) minmax(0, 1fr); gap: 22px; align-items: start; }
+    .video-wrap { position: relative; max-width: 340px; margin: auto; background: #02060b; border: 1px solid #294158; border-radius: 14px; overflow: hidden; aspect-ratio: 9/16; }
+    video { display: block; width: 100%; height: 100%; object-fit: contain; background: #02060b; }
+    .final-meta { min-width: 0; }
+    .final-meta h4 { margin: 5px 0 8px; font-size: 18px; }
+    .final-meta p { color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; }
+    .metric { background: #132840; border: 1px solid #24425d; border-radius: 9px; padding: 8px 10px; color: #c0d7ea; font-size: 10px; }
+    .file-path { display: block; overflow-wrap: anywhere; color: #8ba5bd; background: #071523; border: 1px solid #1e354b; border-radius: 9px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
+    .download { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; text-decoration: none; border-radius: 10px; padding: 10px 13px; color: #04131d; font-size: 11px; font-weight: 800; background: var(--cyan); }
+    details.debug { margin-top: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 17px; background: #091625; }
+    details.debug summary { font-size: 12px; }
+    .console { margin-top: 11px; max-height: 190px; overflow: auto; background: #030a11; border-radius: 10px; padding: 11px; color: #90abbe; font: 10px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+    .clip-debug { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+    .clip-debug a { color: #a6e8e7; border: 1px solid #285357; border-radius: 8px; padding: 8px; font-size: 10px; text-decoration: none; }
+    .notice { display: none; padding: 12px 14px; border-radius: 11px; background: #361f2a; border: 1px solid #70404a; color: #ffc2c3; font-size: 11px; line-height: 1.5; }
+    .notice.visible { display: block; }
+    footer { color: #647d94; font-size: 10px; text-align: center; padding: 26px 0 0; }
+    @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } .controls { position: static; } .content-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .shell { width: min(100% - 24px, 560px); padding-top: 17px; } header { margin-bottom: 21px; } .hero { display: block; } .quality-chip { display: inline-block; margin-top: 13px; } .content-grid { grid-template-columns: 1fr; } .steps { grid-template-columns: repeat(3, 1fr); row-gap: 13px; } .step { font-size: 9px; } .final-layout { grid-template-columns: 1fr; } .video-wrap { width: min(100%, 310px); } .progress-top { align-items: flex-start; flex-direction: column; } #runLabel { text-align: left; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand"><div class="mark">N</div><div><h1>NEWSREEL</h1><p>STUDIO JT AUTOMATISÉ · V2 FULL-H3</p></div></div>
+      <div class="health"><span class="dot" id="healthDot"></span><span id="healthText">Vérification du bridge local…</span></div>
+    </header>
+
+    <section class="hero">
+      <div><div class="eyebrow">De l'actualité au MP4 final</div><h2>Un JT satirique entièrement vivant.</h2><p>Agnes écrit et compose l'univers visuel. FastH3 anime le présentateur ET les reporters avec audio natif; FFmpeg assemble localement le JT final.</p></div>
+      <div class="quality-chip">1080 × 1920 &nbsp;·&nbsp; 24 fps &nbsp;·&nbsp; H.264 / AAC</div>
+    </section>
+
+    <div class="layout">
+      <aside class="card controls">
+        <div class="card-heading"><h3>Créer un JT</h3><span class="tag">UN RUN ISOLÉ</span></div>
+        <label for="query">Thème / recherche Google News</label>
+        <input id="query" value="actualité France" placeholder="Ex. actualité France, climat, économie">
+        <div class="two">
+          <div>
+            <label for="category">Catégorie</label>
+            <select id="category">
+              <option value="NATION" selected>🇫🇷 France</option>
+              <option value="WORLD">🌍 International</option>
+              <option value="BUSINESS">💼 Économie</option>
+              <option value="TECHNOLOGY">💻 Technologie</option>
+              <option value="SCIENCE">🔬 Science</option>
+              <option value="HEALTH">🏥 Santé</option>
+              <option value="SPORTS">⚽ Sport</option>
+              <option value="ENTERTAINMENT">🎬 Culture</option>
+            </select>
+          </div>
+          <div><label for="count">Nombre de sujets</label><select id="count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></div>
+        </div>
+        <details open>
+          <summary>Direction créative</summary>
+          <div class="two">
+            <div><label for="director">Réalisation</label><select id="director"></select></div>
+            <div><label for="palette">Palette</label><select id="palette"></select></div>
+          </div>
+          <label for="intensity">Intensité</label>
+          <select id="intensity"></select>
+          <p class="hint">La couche créative historique pilote scénario, costumes, décors, gags, caméra, lumière et palette. L'intensité règle désormais la densité et l'escalade visuelle sans changer les faits.</p>
+        </details>
+        <details open>
+          <summary>Configuration Agnes</summary>
+          <label for="agnesKey">Clé API Agnes</label>
+          <input id="agnesKey" type="password" autocomplete="off" placeholder="sk-… (utilisée en mémoire, jamais enregistrée)">
+          <label for="agnesBase">API base URL</label><input id="agnesBase" value="https://apihub.agnes-ai.com/v1">
+          <div class="two">
+            <div><label for="textModel">Modèle texte</label><input id="textModel" value="agnes-2.5-flash"></div>
+            <div><label for="imageModel">Modèle image</label><input id="imageModel" value="agnes-image-2.5-flash"></div>
+          </div>
+          <div class="two">
+            <div><label for="imageSize">Taille image Agnes</label><input id="imageSize" value="1K"></div>
+            <div><label for="imageRatio">Ratio image</label><input id="imageRatio" value="9:16"></div>
+          </div>
+          <p class="hint">La clé n'est pas écrite dans le scénario ni le manifeste. Vous pouvez aussi définir AGNES_API_KEY dans l'environnement du bridge local.</p>
+        </details>
+        <div class="actions"><button class="primary" id="startButton">Lancer le JT</button><button class="secondary" id="demoButton">Démo hors-ligne</button></div>
+        <label for="recentRun">Runs récents</label>
+        <div class="two">
+          <select id="recentRun"><option value="">Aucun run chargé</option></select>
+          <button class="secondary" id="loadRunButton">Charger</button>
+        </div>
+        <div class="actions"><button class="secondary" id="resumeButton" disabled>Reprendre le run</button><button class="secondary" id="reassembleButton" disabled>Remonter le MP4</button></div>
+        <div class="secure">● Démo : aucune requête Agnes, aucun appel Modal, aucun GPU. Les runs restent récupérables après un redémarrage du bridge.</div>
+      </aside>
+
+      <main class="main">
+        <div class="notice" id="notice"></div>
+        <section class="card progress-card">
+          <div class="progress-top"><h3>Progression du run</h3><span id="runLabel">Aucun run actif</span></div>
+          <div class="steps" id="steps">
+            <div class="step" data-step="news"><span class="number">1</span>News</div>
+            <div class="step" data-step="scenario"><span class="number">2</span>Scénario</div>
+            <div class="step" data-step="images"><span class="number">3</span>Images</div>
+            <div class="step" data-step="h3"><span class="number">4</span>FastH3</div>
+            <div class="step" data-step="assembly"><span class="number">5</span>Montage</div>
+            <div class="step" data-step="ready"><span class="number">6</span>JT prêt</div>
+          </div>
+          <div class="progress-track"><div id="progressFill"></div></div>
+        </section>
+
+        <div class="content-grid">
+          <section class="card section-card"><h3>Actualités retenues <span id="newsCount">En attente</span></h3><div id="newsPanel" class="empty">Les articles Google News apparaîtront ici.</div></section>
+          <section class="card section-card"><h3>Scénario JT <span id="scenarioCount">En attente</span></h3><div id="scenarioPanel" class="empty">Les textes host / reporter d'Agnes apparaîtront ici.</div></section>
+        </div>
+        <section class="card section-card"><h3>Keyframes créatives Agnes <span id="imageCount">En attente</span></h3><div id="imagePanel" class="empty">Une keyframe plateau et une keyframe reporter par sujet alimentent le batch full-H3.</div></section>
+
+        <section class="card final-card" id="finalCard">
+          <div class="final-header"><h3>JT FINAL</h3><span class="ready-badge" id="finalBadge">EN ATTENTE</span></div>
+          <div class="final-layout">
+            <div class="video-wrap"><video id="finalVideo" controls playsinline preload="metadata" poster=""></video></div>
+            <div class="final-meta" id="finalMeta"><div class="empty">Le MP4 final apparaîtra ici après le montage FFmpeg local.</div></div>
+          </div>
+        </section>
+
+        <details class="debug">
+          <summary>Console debug & clips intermédiaires</summary>
+          <div id="clipDebug" class="clip-debug"></div>
+          <div class="console" id="console">NewsReel local bridge prêt. Les erreurs de pipeline seront affichées ici.</div>
+        </details>
+      </main>
+    </div>
+    <footer>NewsReel V2 · couche créative historique restaurée · host + reporters FastH3 · montage final local.</footer>
+  </div>
+<script>
+(() => {
+  const stepOrder = ["news", "scenario", "images", "h3", "assembly", "ready"];
+  const $ = (id) => document.getElementById(id);
+  let activeRun = null;
+  let pollTimer = null;
+  let lastSnapshot = "";
+
+  function log(message) {
+    const now = new Date().toLocaleTimeString("fr-FR", {hour12: false});
+    $("console").textContent = `[${now}] ${message}\n` + $("console").textContent;
+  }
+  function showNotice(message) {
+    const box = $("notice"); box.textContent = message; box.classList.add("visible");
+  }
+  function clearNotice() { $("notice").textContent = ""; $("notice").classList.remove("visible"); }
+  function setSteps(stages = {}) {
+    let done = 0;
+    for (const name of stepOrder) {
+      const state = stages[name]?.status || "pending";
+      const element = document.querySelector(`[data-step="${name}"]`);
+      element.className = `step ${state}`;
+      if (state === "succeeded") done++;
+    }
+    $("progressFill").style.width = `${Math.round(done / stepOrder.length * 100)}%`;
+  }
+  async function getJson(url) {
+    const response = await fetch(url);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    return data;
+  }
+  function resetRunPanels() {
+    $("finalBadge").textContent = "EN ATTENTE";
+    $("finalVideo").removeAttribute("src"); $("finalVideo").dataset.run = "";
+    $("finalMeta").className = "final-meta";
+    $("finalMeta").innerHTML = '<div class="empty">Le JT final apparaîtra ici après le montage FFmpeg local.</div>';
+    $("newsPanel").className = "empty"; $("newsPanel").textContent = "En attente du flux…";
+    $("scenarioPanel").className = "empty"; $("scenarioPanel").textContent = "En attente du scénario…";
+    $("imagePanel").className = "empty"; $("imagePanel").textContent = "En attente des images…";
+    $("newsCount").textContent = $("scenarioCount").textContent = $("imageCount").textContent = "En attente";
+    $("clipDebug").replaceChildren();
+    setSteps({});
+    lastSnapshot = "";
+  }
+  async function refreshRecentRuns(selectedRun = activeRun) {
+    const data = await getJson("/runs?limit=20");
+    const select = $("recentRun");
+    select.replaceChildren();
+    const empty = document.createElement("option");
+    empty.value = ""; empty.textContent = data.runs?.length ? "Choisir un run…" : "Aucun run";
+    select.append(empty);
+    (data.runs || []).forEach((run) => {
+      const option = document.createElement("option");
+      option.value = run.run_id;
+      const subjectText = run.requested_subject_count ? ` · ${run.requested_subject_count} sujets` : "";
+      option.textContent = `${run.run_id} · ${run.status}${subjectText}`;
+      option.selected = run.run_id === selectedRun;
+      select.append(option);
+    });
+  }
+  async function loadRun(runId) {
+    if (!runId) return;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    clearNotice();
+    resetRunPanels();
+    activeRun = runId;
+    await updateRun(runId);
+    const manifest = await getJson(`/run/${encodeURIComponent(runId)}`);
+    if (manifest.status === "running" || manifest.status === "queued") {
+      pollTimer = setInterval(() => updateRun(activeRun).catch((error) => {
+        showNotice(error.message); log(error.message);
+      }), 1800);
+    }
+    await refreshRecentRuns(runId);
+    log(`Run chargé: ${runId}`);
+  }
+  function renderNews(items, runId) {
+    if (!Array.isArray(items) || !items.length) return;
+    $("newsCount").textContent = `${items.length} articles`;
+    const panel = document.createElement("div"); panel.className = "news-list";
+    items.forEach((item) => {
+      const card = document.createElement("div"); card.className = "news-item";
+      const anchor = document.createElement("a");
+      anchor.textContent = item.title || "Article"; anchor.href = item.url || "#"; anchor.target = "_blank"; anchor.rel = "noopener";
+      const meta = document.createElement("small"); meta.textContent = [item.source, item.published].filter(Boolean).join(" · ");
+      card.append(anchor, meta); panel.append(card);
+    });
+    $("newsPanel").replaceChildren(panel);
+  }
+  function renderScenario(scenario) {
+    if (!scenario?.segments) return;
+    $("scenarioCount").textContent = `${scenario.segments.length} sujets`;
+    const panel = document.createElement("div"); panel.className = "scenario-list";
+    scenario.segments.forEach((segment, index) => {
+      const card = document.createElement("div"); card.className = "scenario-item";
+      const title = document.createElement("strong"); title.textContent = `${index + 1}. ${segment.title}`;
+      const host = document.createElement("p"); host.textContent = `HOST · ${segment.host_dialogue}`;
+      const reporter = document.createElement("p"); reporter.textContent = `REPORTER H3 · ${segment.reporter_dialogue}`;
+      card.append(title, host, reporter); panel.append(card);
+    });
+    $("scenarioPanel").replaceChildren(panel);
+  }
+  function renderImages(runId, files) {
+    const images = (files || []).filter((file) => file.startsWith("images/") && file.endsWith(".png"));
+    if (!images.length) return;
+    $("imageCount").textContent = `${images.length} fichiers`;
+    const panel = document.createElement("div"); panel.className = "thumbs";
+    images.forEach((file) => {
+      const holder = document.createElement("div"); holder.className = "thumb";
+      const image = document.createElement("img"); image.loading = "lazy"; image.alt = file.split("/").pop();
+      image.src = `/output/${encodeURIComponent(runId)}/${file.split("/").map(encodeURIComponent).join("/")}`;
+      holder.append(image); panel.append(holder);
+    });
+    $("imagePanel").replaceChildren(panel);
+  }
+  function renderFinal(manifest, runId) {
+    if (!manifest.final_file) return;
+    const url = `/output/${encodeURIComponent(runId)}/newsreel_final.mp4`;
+    const video = $("finalVideo");
+    if (video.dataset.run !== runId) { video.src = url; video.dataset.run = runId; video.load(); }
+    $("finalBadge").textContent = manifest.status === "complete" ? "JT PRÊT" : "MP4 EN COURS";
+    const summary = manifest.summary || {};
+    const meta = document.createElement("div"); meta.className = "final-meta";
+    const heading = document.createElement("h4"); heading.textContent = summary.title || "Votre JT NewsReel";
+    const description = document.createElement("p"); description.textContent = "Montage local depuis la timeline sérialisée. Le présentateur et les reporters sont tous des clips FastH3 avec audio natif.";
+    const metrics = document.createElement("div"); metrics.className = "metrics";
+    [
+      `${Number(manifest.final_duration_seconds || 0).toFixed(1)} s`,
+      `${summary.resolution || "1080x1920"}`,
+      `${summary.fps || 24} fps`,
+      `${manifest.h3_clip_count ?? summary.h3_clip_count ?? 0} clips H3`,
+    ].forEach((text) => { const chip = document.createElement("span"); chip.className = "metric"; chip.textContent = text; metrics.append(chip); });
+    const path = document.createElement("code"); path.className = "file-path"; path.textContent = `output/${runId}/newsreel_final.mp4`;
+    const link = document.createElement("a"); link.className = "download"; link.href = url; link.download = "newsreel_final.mp4"; link.textContent = "Ouvrir / télécharger le MP4";
+    meta.append(heading, description, metrics, path, link); $("finalMeta").replaceWith(meta); meta.id = "finalMeta";
+    const clips = (manifest.files || []).filter((file) => file.startsWith("h3/") && file.endsWith(".mp4"));
+    $("clipDebug").replaceChildren(...clips.map((file) => {
+      const a = document.createElement("a"); a.href = `/output/${encodeURIComponent(runId)}/${file}`; a.textContent = `Debug · ${file.split("/").pop()}`; a.target = "_blank"; return a;
+    }));
+  }
+  async function updateRun(runId) {
+    const manifest = await getJson(`/run/${encodeURIComponent(runId)}`);
+    const snapshot = JSON.stringify(manifest.stages);
+    if (snapshot !== lastSnapshot) { log(`Run ${runId} · ${manifest.status} · progression mise à jour`); lastSnapshot = snapshot; }
+    setSteps(manifest.stages || {});
+    $("runLabel").textContent = `${runId} · ${manifest.status}`;
+    if (manifest.stages?.news?.status === "succeeded") {
+      try { renderNews(await getJson(`/output/${encodeURIComponent(runId)}/news.json`), runId); } catch (_) {}
+    }
+    if (manifest.stages?.scenario?.status === "succeeded") {
+      try { renderScenario(await getJson(`/output/${encodeURIComponent(runId)}/scenario.json`)); } catch (_) {}
+    }
+    renderImages(runId, manifest.files);
+    const canReassemble = manifest.stages?.h3?.status === "succeeded";
+    $("resumeButton").disabled = !(manifest.status === "failed" || manifest.status === "complete");
+    $("reassembleButton").disabled = !canReassemble;
+    if (manifest.status === "complete" && manifest.final_file) {
+      renderFinal(manifest, runId); $("startButton").disabled = false; $("demoButton").disabled = false;
+      clearInterval(pollTimer); pollTimer = null; log(`JT prêt · ${manifest.final_duration_seconds}s · ${manifest.final_file}`);
+      await refreshRecentRuns(runId);
+    } else if (manifest.status === "failed") {
+      $("startButton").disabled = false; $("demoButton").disabled = false;
+      const errors = (manifest.errors || []).map((e) => e.message).join("\n") || "Erreur de pipeline sans détail.";
+      showNotice(errors); log(`Échec du run ${runId}: ${errors}`); clearInterval(pollTimer); pollTimer = null;
+      await refreshRecentRuns(runId);
+    }
+    if (manifest.status === "running" || manifest.status === "queued") renderFinal(manifest, runId);
+  }
+  async function startRun(demo) {
+    clearNotice();
+    $("startButton").disabled = true; $("demoButton").disabled = true;
+    $("resumeButton").disabled = true; $("reassembleButton").disabled = true;
+    resetRunPanels();
+    $("finalBadge").textContent = demo ? "DÉMO HORS-LIGNE" : "RUN EN COURS";
+    $("newsCount").textContent = $("scenarioCount").textContent = $("imageCount").textContent = "En cours";
+    try {
+      const body = demo ? {} : {
+        query: $("query").value.trim(), count: Number($("count").value),
+        director: $("director").value, palette: $("palette").value, intensity: $("intensity").value,
+        agnes_api_key: $("agnesKey").value,
+        agnes_base_url: $("agnesBase").value.trim(),
+        agnes_text_model: $("textModel").value.trim(), agnes_image_model: $("imageModel").value.trim(),
+        agnes_image_size: $("imageSize").value.trim(), agnes_image_ratio: $("imageRatio").value.trim(),
+      };
+      const response = await fetch(demo ? "/demo" : "/runs", {
+        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      if (!demo) $("agnesKey").value = "";
+      activeRun = data.run_id; $("runLabel").textContent = `${activeRun} · queued`;
+      log(`${demo ? "Démo" : "Run Agnes + Modal"} démarré: ${activeRun}`);
+      await refreshRecentRuns(activeRun);
+      await updateRun(activeRun);
+      pollTimer = setInterval(() => updateRun(activeRun).catch((error) => { showNotice(error.message); log(error.message); }), 1800);
+    } catch (error) {
+      $("startButton").disabled = false; $("demoButton").disabled = false;
+      showNotice(error.message); log(`Impossible de démarrer: ${error.message}`);
+    }
+  }
+  async function runAction(endpoint, label) {
+    if (!activeRun) return;
+    clearNotice();
+    $("resumeButton").disabled = true; $("reassembleButton").disabled = true;
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({run_id: activeRun}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      log(`${label}: ${activeRun}`);
+      $("runLabel").textContent = `${activeRun} · queued`;
+      await updateRun(activeRun);
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => updateRun(activeRun).catch((error) => {
+        showNotice(error.message); log(error.message);
+      }), 1800);
+    } catch (error) {
+      showNotice(error.message); log(`${label} impossible: ${error.message}`);
+      $("resumeButton").disabled = false;
+    }
+  }
+  $("startButton").addEventListener("click", () => startRun(false));
+  $("demoButton").addEventListener("click", () => startRun(true));
+  $("loadRunButton").addEventListener("click", () => loadRun($("recentRun").value).catch((error) => {
+    showNotice(error.message); log(`Chargement impossible: ${error.message}`);
+  }));
+  $("resumeButton").addEventListener("click", () => runAction("/resume", "Reprise"));
+  $("reassembleButton").addEventListener("click", () => runAction("/assemble", "Remontage"));
+  function populateSelect(id, items, selected) {
+    const select = $(id); select.replaceChildren();
+    (items || []).forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.value; option.textContent = item.label;
+      option.selected = item.value === selected; select.append(option);
+    });
+  }
+  const categoryQueries = {
+    WORLD: "actualité internationale", NATION: "actualité France", BUSINESS: "économie",
+    TECHNOLOGY: "technologie", SCIENCE: "science", HEALTH: "santé", SPORTS: "sport",
+    ENTERTAINMENT: "culture"
+  };
+  $("category").addEventListener("change", () => {
+    $("query").value = categoryQueries[$("category").value] || $("query").value;
+  });
+  getJson("/config").then((config) => {
+    $("agnesBase").value = config.agnes_base_url;
+    $("textModel").value = config.agnes_text_model;
+    $("imageModel").value = config.agnes_image_model;
+    $("imageSize").value = config.agnes_image_size;
+    $("imageRatio").value = config.agnes_image_ratio;
+    const creative = config.creative || {};
+    const defaults = creative.defaults || {};
+    populateSelect("director", creative.directors, defaults.director);
+    populateSelect("palette", creative.palettes, defaults.palette);
+    populateSelect("intensity", creative.intensity, defaults.intensity);
+  }).catch((error) => showNotice(error.message));
+  refreshRecentRuns().catch((error) => log(`Runs récents indisponibles: ${error.message}`));
+  getJson("/health").then((health) => {
+    const mediaReady = health.ffmpeg_available && health.ffprobe_available;
+    const liveReady = mediaReady && health.h3_graph_built_in && health.modal_client_installed;
+    $("healthDot").style.background = liveReady ? "var(--green)" : "var(--yellow)";
+    $("healthText").textContent = liveReady
+      ? "Bridge local · Agnes / FastH3 full-H3 configurés"
+      : mediaReady ? "Bridge prêt · démo locale disponible" : "Bridge prêt · FFmpeg à installer";
+    if (!mediaReady) showNotice("FFmpeg et ffprobe sont nécessaires au montage. Consultez le README avant de lancer un run.");
+    else if (!liveReady) showNotice("La démo locale est prête. Installez le client Modal avant le premier run réel.");
+  }).catch((error) => { $("healthText").textContent = "Bridge local indisponible"; showNotice(error.message); });
+})();
+</script>
+</body>
+</html>
