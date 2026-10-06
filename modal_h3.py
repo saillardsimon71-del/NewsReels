@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from newsreel.h3_workflow import (
+    H3_COMFYUI_REVISION,
     H3_DURATION_SECONDS,
     H3_FPS,
     H3_FRAMES,
@@ -25,7 +26,6 @@ from newsreel.h3_workflow import (
     H3_MODAL_GPU,
     H3_MODAL_MEMORY_MIB,
     H3_MODAL_TIMEOUT_SECONDS,
-    H3_COMFYUI_REVISION,
     H3_MODEL_FILES,
     H3_STEPS,
     H3_VOLUME_NAME,
