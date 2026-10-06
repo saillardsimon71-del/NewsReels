@@ -142,7 +142,7 @@
               <option value="ENTERTAINMENT">🎬 Culture</option>
             </select>
           </div>
-          <div><label for="count">Nombre de sujets</label><select id="count"><option selected>3</option><option>5</option><option>7</option></select></div>
+          <div><label for="count">Nombre de sujets</label><select id="count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></div>
         </div>
         <details open>
           <summary>Direction créative</summary>
@@ -152,7 +152,7 @@
           </div>
           <label for="intensity">Intensité</label>
           <select id="intensity"></select>
-          <p class="hint">La couche créative historique pilote scénario, costumes, décors, gags, caméra, lumière et palette. L'intensité est conservée pour compatibilité avec l'ancien NewsReel.</p>
+          <p class="hint">La couche créative historique pilote scénario, costumes, décors, gags, caméra, lumière et palette. L'intensité règle désormais la densité et l'escalade visuelle sans changer les faits.</p>
         </details>
         <details open>
           <summary>Configuration Agnes</summary>
@@ -170,7 +170,8 @@
           <p class="hint">La clé n'est pas écrite dans le scénario ni le manifeste. Vous pouvez aussi définir AGNES_API_KEY dans l'environnement du bridge local.</p>
         </details>
         <div class="actions"><button class="primary" id="startButton">Lancer le JT</button><button class="secondary" id="demoButton">Démo hors-ligne</button></div>
-        <div class="secure">● Démo : aucune requête Agnes, aucun appel Modal, aucun GPU.</div>
+        <div class="actions"><button class="secondary" id="resumeButton" disabled>Reprendre le run</button><button class="secondary" id="reassembleButton" disabled>Remonter le MP4</button></div>
+        <div class="secure">● Démo : aucune requête Agnes, aucun appel Modal, aucun GPU. Les actions de reprise réutilisent les fichiers déjà présents.</div>
       </aside>
 
       <main class="main">
@@ -243,7 +244,6 @@
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
     return data;
   }
-  function safeText(value) { return String(value ?? ""); }
   function renderNews(items, runId) {
     if (!Array.isArray(items) || !items.length) return;
     $("newsCount").textContent = `${items.length} articles`;
@@ -321,6 +321,9 @@
       try { renderScenario(await getJson(`/output/${encodeURIComponent(runId)}/scenario.json`)); } catch (_) {}
     }
     renderImages(runId, manifest.files);
+    const canReassemble = manifest.stages?.h3?.status === "succeeded";
+    $("resumeButton").disabled = !(manifest.status === "failed" || manifest.status === "complete");
+    $("reassembleButton").disabled = !canReassemble;
     if (manifest.status === "complete" && manifest.final_file) {
       renderFinal(manifest, runId); $("startButton").disabled = false; $("demoButton").disabled = false;
       clearInterval(pollTimer); pollTimer = null; log(`JT prêt · ${manifest.final_duration_seconds}s · ${manifest.final_file}`);
@@ -334,6 +337,7 @@
   async function startRun(demo) {
     clearNotice();
     $("startButton").disabled = true; $("demoButton").disabled = true;
+    $("resumeButton").disabled = true; $("reassembleButton").disabled = true;
     $("finalBadge").textContent = demo ? "DÉMO HORS-LIGNE" : "RUN EN COURS";
     $("finalVideo").removeAttribute("src"); $("finalVideo").dataset.run = "";
     $("finalMeta").className = "final-meta";
@@ -367,8 +371,34 @@
       showNotice(error.message); log(`Impossible de démarrer: ${error.message}`);
     }
   }
+  async function runAction(endpoint, label) {
+    if (!activeRun) return;
+    clearNotice();
+    $("resumeButton").disabled = true; $("reassembleButton").disabled = true;
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({run_id: activeRun}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      log(`${label}: ${activeRun}`);
+      $("runLabel").textContent = `${activeRun} · queued`;
+      await updateRun(activeRun);
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => updateRun(activeRun).catch((error) => {
+        showNotice(error.message); log(error.message);
+      }), 1800);
+    } catch (error) {
+      showNotice(error.message); log(`${label} impossible: ${error.message}`);
+      $("resumeButton").disabled = false;
+    }
+  }
   $("startButton").addEventListener("click", () => startRun(false));
   $("demoButton").addEventListener("click", () => startRun(true));
+  $("resumeButton").addEventListener("click", () => runAction("/resume", "Reprise"));
+  $("reassembleButton").addEventListener("click", () => runAction("/assemble", "Remontage"));
   function populateSelect(id, items, selected) {
     const select = $(id); select.replaceChildren();
     (items || []).forEach((item) => {
