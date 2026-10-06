@@ -85,6 +85,11 @@ class NewsReelPipeline:
             news = self.news_provider.fetch(
                 query, limit=min(self.settings.max_news_items, max(count * 3, count))
             )
+            if len(news) < count:
+                raise RuntimeError(
+                    f"Google News n'a fourni que {len(news)} actualités distinctes pour "
+                    f"{count} sujets demandés. Essayez une recherche plus large."
+                )
             news_path = run_dir / "news.json"
             RunStore.atomic_write_json(news_path, [item.to_dict() for item in news])
             self.store.register_file(run_id, news_path)
@@ -147,7 +152,6 @@ class NewsReelPipeline:
                 active_stage,
                 "succeeded",
                 image_count=1 + len(reporter_images),
-                host_audio_count=0,
                 message="Keyframes host + reporters générées",
             )
 
