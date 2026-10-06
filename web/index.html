@@ -114,12 +114,12 @@
 <body>
   <div class="shell">
     <header>
-      <div class="brand"><div class="mark">N</div><div><h1>NEWSREEL</h1><p>STUDIO JT AUTOMATISÉ · V1</p></div></div>
+      <div class="brand"><div class="mark">N</div><div><h1>NEWSREEL</h1><p>STUDIO JT AUTOMATISÉ · V2 FULL-H3</p></div></div>
       <div class="health"><span class="dot" id="healthDot"></span><span id="healthText">Vérification du bridge local…</span></div>
     </header>
 
     <section class="hero">
-      <div><div class="eyebrow">De l'actualité au MP4 final</div><h2>Votre JT, monté automatiquement.</h2><p>Agnes prépare le scénario et les images. FastH3 anime uniquement les séquences reporter; le plateau, les voix du présentateur et le montage sont réalisés localement.</p></div>
+      <div><div class="eyebrow">De l'actualité au MP4 final</div><h2>Un JT satirique entièrement vivant.</h2><p>Agnes écrit et compose l'univers visuel. FastH3 anime le présentateur ET les reporters avec audio natif; FFmpeg assemble localement le JT final.</p></div>
       <div class="quality-chip">1080 × 1920 &nbsp;·&nbsp; 24 fps &nbsp;·&nbsp; H.264 / AAC</div>
     </section>
 
@@ -129,9 +129,31 @@
         <label for="query">Thème / recherche Google News</label>
         <input id="query" value="actualité France" placeholder="Ex. actualité France, climat, économie">
         <div class="two">
-          <div><label for="count">Nombre de sujets</label><select id="count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select></div>
-          <div><label for="voice">Voix du présentateur</label><select id="voice"><option value="fr-FR-DeniseNeural">Denise · FR</option><option value="fr-FR-EloiseNeural">Éloïse · FR</option><option value="fr-FR-HenriNeural">Henri · FR</option><option value="fr-FR-RemyMultilingualNeural">Rémy · FR</option></select></div>
+          <div>
+            <label for="category">Catégorie</label>
+            <select id="category">
+              <option value="NATION" selected>🇫🇷 France</option>
+              <option value="WORLD">🌍 International</option>
+              <option value="BUSINESS">💼 Économie</option>
+              <option value="TECHNOLOGY">💻 Technologie</option>
+              <option value="SCIENCE">🔬 Science</option>
+              <option value="HEALTH">🏥 Santé</option>
+              <option value="SPORTS">⚽ Sport</option>
+              <option value="ENTERTAINMENT">🎬 Culture</option>
+            </select>
+          </div>
+          <div><label for="count">Nombre de sujets</label><select id="count"><option selected>3</option><option>5</option><option>7</option></select></div>
         </div>
+        <details open>
+          <summary>Direction créative</summary>
+          <div class="two">
+            <div><label for="director">Réalisation</label><select id="director"></select></div>
+            <div><label for="palette">Palette</label><select id="palette"></select></div>
+          </div>
+          <label for="intensity">Intensité</label>
+          <select id="intensity"></select>
+          <p class="hint">La couche créative historique pilote scénario, costumes, décors, gags, caméra, lumière et palette. L'intensité est conservée pour compatibilité avec l'ancien NewsReel.</p>
+        </details>
         <details open>
           <summary>Configuration Agnes</summary>
           <label for="agnesKey">Clé API Agnes</label>
@@ -170,7 +192,7 @@
           <section class="card section-card"><h3>Actualités retenues <span id="newsCount">En attente</span></h3><div id="newsPanel" class="empty">Les articles Google News apparaîtront ici.</div></section>
           <section class="card section-card"><h3>Scénario JT <span id="scenarioCount">En attente</span></h3><div id="scenarioPanel" class="empty">Les textes host / reporter d'Agnes apparaîtront ici.</div></section>
         </div>
-        <section class="card section-card"><h3>Images Agnes & plateau <span id="imageCount">En attente</span></h3><div id="imagePanel" class="empty">Le même portrait plateau est réutilisé avec un mouvement Ken Burns local.</div></section>
+        <section class="card section-card"><h3>Keyframes créatives Agnes <span id="imageCount">En attente</span></h3><div id="imagePanel" class="empty">Une keyframe plateau et une keyframe reporter par sujet alimentent le batch full-H3.</div></section>
 
         <section class="card final-card" id="finalCard">
           <div class="final-header"><h3>JT FINAL</h3><span class="ready-badge" id="finalBadge">EN ATTENTE</span></div>
@@ -187,7 +209,7 @@
         </details>
       </main>
     </div>
-    <footer>NewsReel V1 · les générations réelles Agnes / Modal ne sont jamais déclenchées par le mode démo.</footer>
+    <footer>NewsReel V2 · couche créative historique restaurée · host + reporters FastH3 · montage final local.</footer>
   </div>
 <script>
 (() => {
@@ -270,7 +292,7 @@
     const summary = manifest.summary || {};
     const meta = document.createElement("div"); meta.className = "final-meta";
     const heading = document.createElement("h4"); heading.textContent = summary.title || "Votre JT NewsReel";
-    const description = document.createElement("p"); description.textContent = "Montage local depuis la timeline sérialisée. Un MP4 vertical unique, avec l'audio des reporters H3 et les voix du présentateur.";
+    const description = document.createElement("p"); description.textContent = "Montage local depuis la timeline sérialisée. Le présentateur et les reporters sont tous des clips FastH3 avec audio natif.";
     const metrics = document.createElement("div"); metrics.className = "metrics";
     [
       `${Number(manifest.final_duration_seconds || 0).toFixed(1)} s`,
@@ -324,11 +346,11 @@
     try {
       const body = demo ? {} : {
         query: $("query").value.trim(), count: Number($("count").value),
+        director: $("director").value, palette: $("palette").value, intensity: $("intensity").value,
         agnes_api_key: $("agnesKey").value,
         agnes_base_url: $("agnesBase").value.trim(),
         agnes_text_model: $("textModel").value.trim(), agnes_image_model: $("imageModel").value.trim(),
         agnes_image_size: $("imageSize").value.trim(), agnes_image_ratio: $("imageRatio").value.trim(),
-        tts_voice: $("voice").value,
       };
       const response = await fetch(demo ? "/demo" : "/runs", {
         method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
@@ -347,23 +369,43 @@
   }
   $("startButton").addEventListener("click", () => startRun(false));
   $("demoButton").addEventListener("click", () => startRun(true));
+  function populateSelect(id, items, selected) {
+    const select = $(id); select.replaceChildren();
+    (items || []).forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.value; option.textContent = item.label;
+      option.selected = item.value === selected; select.append(option);
+    });
+  }
+  const categoryQueries = {
+    WORLD: "actualité internationale", NATION: "actualité France", BUSINESS: "économie",
+    TECHNOLOGY: "technologie", SCIENCE: "science", HEALTH: "santé", SPORTS: "sport",
+    ENTERTAINMENT: "culture"
+  };
+  $("category").addEventListener("change", () => {
+    $("query").value = categoryQueries[$("category").value] || $("query").value;
+  });
   getJson("/config").then((config) => {
     $("agnesBase").value = config.agnes_base_url;
     $("textModel").value = config.agnes_text_model;
     $("imageModel").value = config.agnes_image_model;
     $("imageSize").value = config.agnes_image_size;
     $("imageRatio").value = config.agnes_image_ratio;
-    $("voice").value = config.tts_voice;
-  }).catch(() => {});
+    const creative = config.creative || {};
+    const defaults = creative.defaults || {};
+    populateSelect("director", creative.directors, defaults.director);
+    populateSelect("palette", creative.palettes, defaults.palette);
+    populateSelect("intensity", creative.intensity, defaults.intensity);
+  }).catch((error) => showNotice(error.message));
   getJson("/health").then((health) => {
     const mediaReady = health.ffmpeg_available && health.ffprobe_available;
-    const liveReady = mediaReady && health.h3_graph_built_in && health.modal_client_installed && health.tts_provider_installed;
+    const liveReady = mediaReady && health.h3_graph_built_in && health.modal_client_installed;
     $("healthDot").style.background = liveReady ? "var(--green)" : "var(--yellow)";
     $("healthText").textContent = liveReady
-      ? "Bridge local · Agnes / FastH3 configurés"
+      ? "Bridge local · Agnes / FastH3 full-H3 configurés"
       : mediaReady ? "Bridge prêt · démo locale disponible" : "Bridge prêt · FFmpeg à installer";
     if (!mediaReady) showNotice("FFmpeg et ffprobe sont nécessaires au montage. Consultez le README avant de lancer un run.");
-    else if (!liveReady) showNotice("La démo locale est prête. Le graphe FastH3 est intégré au worker; installez le client Modal et Edge TTS avant le premier run réel.");
+    else if (!liveReady) showNotice("La démo locale est prête. Installez le client Modal avant le premier run réel.");
   }).catch((error) => { $("healthText").textContent = "Bridge local indisponible"; showNotice(error.message); });
 })();
 </script>
