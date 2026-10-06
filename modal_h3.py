@@ -436,7 +436,6 @@ if modal is not None:
     models_volume = modal.Volume.from_name(H3_VOLUME_NAME, create_if_missing=False)
     comfy_image = (
         modal.Image.debian_slim(python_version="3.11")
-        .add_local_python_source("newsreel")
         .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0", "libsm6", "libxext6")
         .pip_install(
             "torch==2.8.0",
@@ -447,6 +446,7 @@ if modal is not None:
             "pip install --no-cache-dir -r /opt/ComfyUI/requirements.txt",
         )
         .env({"NEWSREEL_COMFYUI_DIR": "/opt/ComfyUI"})
+        .add_local_python_source("newsreel")
     )
 
     @app.function(
