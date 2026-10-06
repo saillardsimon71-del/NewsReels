@@ -123,7 +123,14 @@ def test_api_graph_contains_exact_models_dimensions_sampling_vsa_and_native_audi
     assert graph["143"]["inputs"] == {"model": ["6", 0], **H3_SIGMA_SHIFT}
     assert graph["23"]["class_type"] == "VAEDecodeAudio"
     assert graph["91"]["inputs"]["audio"] == ["23", 0]
+    assert graph["15"]["inputs"] == {"noise_seed": job.seed}
     assert graph["92"]["class_type"] == "SaveVideo"
+    assert graph["92"]["inputs"] == {
+        "video": ["91", 0],
+        "filename_prefix": "newsreel/test-run/reporter-0",
+        "format": "auto",
+        "codec": "auto",
+    }
 
     other_graph = build_h3_api_workflow(
         {
@@ -223,9 +230,13 @@ def test_agnes_model_defaults_and_settings_need_no_workflow_file(
 ) -> None:
     monkeypatch.delenv("AGNES_TEXT_MODEL", raising=False)
     monkeypatch.delenv("AGNES_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("AGNES_IMAGE_SIZE", raising=False)
+    monkeypatch.delenv("AGNES_IMAGE_RATIO", raising=False)
     settings = Settings.from_env(project_root=tmp_path)
     assert settings.agnes_text_model == "agnes-2.5-flash"
     assert settings.agnes_image_model == "agnes-image-2.5-flash"
+    assert settings.agnes_image_size == "1K"
+    assert settings.agnes_image_ratio == "9:16"
     assert not hasattr(settings, "h3_workflow_path")
     assert not hasattr(ModalH3Renderer("app", "function"), "workflow_path")
 

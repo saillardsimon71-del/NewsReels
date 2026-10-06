@@ -140,8 +140,8 @@ class AgnesClient:
                 "model": self.settings.agnes_image_model,
                 "prompt": prompt,
                 "size": size or self.settings.agnes_image_size,
+                "ratio": self.settings.agnes_image_ratio,
                 "n": 1,
-                "response_format": "url",
             },
             timeout=max(self.settings.agnes_timeout_seconds, 300),
         )

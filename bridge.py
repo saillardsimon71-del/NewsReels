@@ -33,6 +33,7 @@ class StartRunRequest(BaseModel):
     agnes_text_model: str | None = None
     agnes_image_model: str | None = None
     agnes_image_size: str | None = None
+    agnes_image_ratio: str | None = None
     tts_voice: str | None = None
 
 
@@ -88,6 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "agnes_text_model": runtime_settings.agnes_text_model,
             "agnes_image_model": runtime_settings.agnes_image_model,
             "agnes_image_size": runtime_settings.agnes_image_size,
+            "agnes_image_ratio": runtime_settings.agnes_image_ratio,
             "tts_voice": runtime_settings.tts_voice,
             "output_dir": str(output_root),
             "width": runtime_settings.width,
@@ -125,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             agnes_text_model=body.agnes_text_model or runtime_settings.agnes_text_model,
             agnes_image_model=body.agnes_image_model or runtime_settings.agnes_image_model,
             agnes_image_size=body.agnes_image_size or runtime_settings.agnes_image_size,
+            agnes_image_ratio=body.agnes_image_ratio or runtime_settings.agnes_image_ratio,
             tts_voice=body.tts_voice or runtime_settings.tts_voice,
         )
         run_id, run_dir = store.create()

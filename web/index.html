@@ -141,7 +141,10 @@
             <div><label for="textModel">Modèle texte</label><input id="textModel" value="agnes-2.5-flash"></div>
             <div><label for="imageModel">Modèle image</label><input id="imageModel" value="agnes-image-2.5-flash"></div>
           </div>
-          <label for="imageSize">Taille image Agnes</label><input id="imageSize" value="768x1344">
+          <div class="two">
+            <div><label for="imageSize">Taille image Agnes</label><input id="imageSize" value="1K"></div>
+            <div><label for="imageRatio">Ratio image</label><input id="imageRatio" value="9:16"></div>
+          </div>
           <p class="hint">La clé n'est pas écrite dans le scénario ni le manifeste. Vous pouvez aussi définir AGNES_API_KEY dans l'environnement du bridge local.</p>
         </details>
         <div class="actions"><button class="primary" id="startButton">Lancer le JT</button><button class="secondary" id="demoButton">Démo hors-ligne</button></div>
@@ -324,7 +327,8 @@
         agnes_api_key: $("agnesKey").value,
         agnes_base_url: $("agnesBase").value.trim(),
         agnes_text_model: $("textModel").value.trim(), agnes_image_model: $("imageModel").value.trim(),
-        agnes_image_size: $("imageSize").value.trim(), tts_voice: $("voice").value,
+        agnes_image_size: $("imageSize").value.trim(), agnes_image_ratio: $("imageRatio").value.trim(),
+        tts_voice: $("voice").value,
       };
       const response = await fetch(demo ? "/demo" : "/runs", {
         method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
@@ -348,6 +352,7 @@
     $("textModel").value = config.agnes_text_model;
     $("imageModel").value = config.agnes_image_model;
     $("imageSize").value = config.agnes_image_size;
+    $("imageRatio").value = config.agnes_image_ratio;
     $("voice").value = config.tts_voice;
   }).catch(() => {});
   getJson("/health").then((health) => {

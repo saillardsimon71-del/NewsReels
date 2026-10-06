@@ -35,6 +35,8 @@ def test_local_endpoints_and_explicit_missing_credentials(tmp_path: Path, monkey
                 assert config["height"] == 1920
                 assert config["agnes_text_model"] == "agnes-2.5-flash"
                 assert config["agnes_image_model"] == "agnes-image-2.5-flash"
+                assert config["agnes_image_size"] == "1K"
+                assert config["agnes_image_ratio"] == "9:16"
                 assert (await client.get("/run/absent")).status_code == 404
                 missing_key = await client.post(
                     "/runs", json={"query": "actualité France", "count": 3}

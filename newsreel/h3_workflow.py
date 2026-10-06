@@ -159,7 +159,7 @@ def build_h3_api_workflow(
         },
         "15": {
             "class_type": "RandomNoise",
-            "inputs": {"noise_seed": seed, "control_after_generate": "fixed"},
+            "inputs": {"noise_seed": seed},
         },
         "17": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": H3_SAMPLER}},
         "16": {
@@ -202,7 +202,6 @@ def build_h3_api_workflow(
                 "video": ["91", 0],
                 "filename_prefix": output_prefix,
                 "format": "auto",
-                "format.codec": "auto",
                 "codec": "auto",
             },
         },

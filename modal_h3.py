@@ -146,28 +146,54 @@ def _upload_image(image_path: Path) -> str:
     return f"{subfolder}/{name}" if subfolder else name
 
 
-def _history_video(prompt_id: str) -> tuple[bytes | None, str | None]:
-    history = _http_json(f"{COMFY_API}/history/{urllib.parse.quote(prompt_id)}")
-    entry = history.get(prompt_id) if isinstance(history, dict) else None
+def _history_entry(history: dict[str, Any], prompt_id: str) -> dict[str, Any] | None:
+    exact = history.get(prompt_id)
+    if isinstance(exact, dict):
+        return exact
+    for entry in history.values():
+        if isinstance(entry, dict) and str(entry.get("prompt_id", "")) == prompt_id:
+            return entry
+    # /history/{id} normally returns a one-entry map. Accept a different key in that
+    # response instead of treating a key-name mismatch as a failed generation.
+    entries = [entry for entry in history.values() if isinstance(entry, dict)]
+    return entries[0] if len(entries) == 1 else None
+
+
+def _history_video(prompt_id: str) -> tuple[bytes | None, str | None, bool]:
+    try:
+        history = _http_json(f"{COMFY_API}/history/{urllib.parse.quote(prompt_id)}")
+    except (RuntimeError, ValueError):
+        return None, None, False
+    entry = _history_entry(history, prompt_id) if isinstance(history, dict) else None
     if not isinstance(entry, dict):
-        return None, None
+        return None, None, False
+
     status = entry.get("status", {})
-    if isinstance(status, dict) and status.get("status_str") == "error":
+    status_str = str(status.get("status_str", "")).casefold() if isinstance(status, dict) else ""
+    if status_str == "error":
         messages = status.get("messages", [])
         raise RuntimeError(f"ComfyUI a échoué sur le prompt {prompt_id}: {messages!r}"[:4000])
+    completed = bool(status.get("completed")) or status_str in {"success", "completed"}
+    if not completed:
+        return None, None, False
+
     outputs = entry.get("outputs", {})
     if not isinstance(outputs, dict):
-        return None, None
+        return None, None, True
     for output in outputs.values():
         if not isinstance(output, dict):
             continue
-        for key in ("videos", "gifs", "files"):
+        for key in ("videos", "gifs", "files", "images"):
             items = output.get(key, [])
             for item in items if isinstance(items, list) else []:
                 if not isinstance(item, dict):
                     continue
                 filename = str(item.get("filename", ""))
-                if Path(filename).suffix.lower() not in {".mp4", ".mkv", ".webm"}:
+                if Path(filename).suffix.lower() != ".mp4":
+                    continue
+                # Current SaveVideo exposes PreviewVideo data through `images` with
+                # animated=true rather than the older videos/gifs/files fields.
+                if key == "images" and item.get("animated") is not True:
                     continue
                 query = urllib.parse.urlencode(
                     {
@@ -180,22 +206,89 @@ def _history_video(prompt_id: str) -> tuple[bytes | None, str | None]:
                     with urllib.request.urlopen(
                         f"{COMFY_API}/view?{query}", timeout=180
                     ) as response:
-                        return response.read(), filename
-                except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
-                    raise RuntimeError(f"Téléchargement du MP4 ComfyUI échoué: {exc}") from exc
-    return None, None
+                        content = response.read()
+                    if content:
+                        return content, filename, True
+                except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+                    # Try the worker's output-directory fallback below.
+                    continue
+    return None, None, True
 
 
-def _wait_for_video(prompt_id: str, timeout_seconds: int = 1200) -> tuple[bytes, str]:
+def _find_output_video(filename_prefix: str) -> Path | None:
+    relative_prefix = Path(filename_prefix.replace("\\", "/"))
+    if relative_prefix.is_absolute() or ".." in relative_prefix.parts:
+        raise ValueError("Préfixe de sortie ComfyUI invalide.")
+    output_dir = COMFYUI_DIR / "output" / relative_prefix.parent
+    if not output_dir.is_dir():
+        return None
+    candidates = [
+        path
+        for path in output_dir.iterdir()
+        if path.is_file()
+        and path.name.startswith(relative_prefix.name)
+        and path.suffix.casefold() == ".mp4"
+    ]
+    return max(
+        candidates, key=lambda path: (path.stat().st_mtime_ns, path.stat().st_size), default=None
+    )
+
+
+def _prompt_is_active(prompt_id: str) -> bool | None:
+    try:
+        queue = _http_json(f"{COMFY_API}/queue", timeout=5)
+    except (RuntimeError, ValueError):
+        return None
+    for key in ("queue_running", "queue_pending"):
+        items = queue.get(key, []) if isinstance(queue, dict) else []
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, (list, tuple)) and len(item) > 1 and str(item[1]) == prompt_id:
+                return True
+            if (
+                isinstance(item, dict)
+                and str(item.get("prompt_id", item.get("id", ""))) == prompt_id
+            ):
+                return True
+    return False
+
+
+def _wait_for_video(
+    prompt_id: str, filename_prefix: str, timeout_seconds: int = 1200
+) -> tuple[bytes, str]:
     deadline = time.monotonic() + timeout_seconds
+    previous_file: tuple[Path, int, int] | None = None
+    stable_file_polls = 0
     while time.monotonic() < deadline:
-        result, filename = _history_video(prompt_id)
-        if result is not None and filename:
-            if not result:
-                raise RuntimeError(f"ComfyUI a retourné un fichier vidéo vide ({filename}).")
-            return result, filename
+        content, filename, completed = _history_video(prompt_id)
+        if content is not None and filename:
+            return content, filename
+
+        candidate = _find_output_video(filename_prefix)
+        if completed and candidate is not None:
+            data = candidate.read_bytes()
+            if data:
+                return data, candidate.name
+        elif candidate is not None and _prompt_is_active(prompt_id) is False:
+            stat = candidate.stat()
+            current_file = (candidate, stat.st_size, stat.st_mtime_ns)
+            stable_file_polls = stable_file_polls + 1 if current_file == previous_file else 1
+            previous_file = current_file
+            # With no matching history entry, a stable unique-prefix MP4 and an idle
+            # Comfy queue are the fallback completion signal.
+            if stable_file_polls >= 2:
+                data = candidate.read_bytes()
+                if data:
+                    return data, candidate.name
+        else:
+            previous_file = None
+            stable_file_polls = 0
         time.sleep(2)
-    raise TimeoutError(f"ComfyUI n'a pas terminé le rendu {prompt_id} en {timeout_seconds}s.")
+    raise TimeoutError(
+        f"ComfyUI n'a pas terminé le rendu {prompt_id} (préfixe {filename_prefix}) "
+        f"en {timeout_seconds}s."
+    )
 
 
 def _mount_volume_models() -> None:
@@ -311,16 +404,13 @@ def _run_batch(payload: dict[str, Any]) -> dict[str, Any]:
             image_path.write_bytes(image_bytes)
             try:
                 uploaded_image = _upload_image(image_path)
-                workflow = build_h3_api_workflow(
-                    job,
-                    uploaded_image,
-                    f"newsreel/{run_id}/{job_id}",
-                )
+                output_prefix = f"newsreel/{run_id}/{job_id}"
+                workflow = build_h3_api_workflow(job, uploaded_image, output_prefix)
                 queued = _http_json(f"{COMFY_API}/prompt", {"prompt": workflow}, timeout=60)
                 prompt_id = str(queued.get("prompt_id", ""))
                 if not prompt_id:
                     raise RuntimeError(f"ComfyUI n'a pas accepté le job {job_id}: {queued!r}")
-                content, source_name = _wait_for_video(prompt_id)
+                content, source_name = _wait_for_video(prompt_id, output_prefix)
                 if Path(source_name).suffix.lower() != ".mp4":
                     raise RuntimeError(
                         f"Le workflow FastH3 doit produire un MP4, reçu: {source_name}."

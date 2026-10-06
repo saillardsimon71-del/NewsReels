@@ -1,6 +1,6 @@
 # NewsReel V1 — générateur de JT local → MP4
 
-NewsReel assemble un journal vertical dans `output/<run_id>/newsreel_final.mp4`. Le run par défaut contient trois sujets et envoie **un seul batch Modal** pour les reporters. Agnes prépare le scénario et les images; Edge TTS génère localement la voix du présentateur; le plateau est animé et le montage final est réalisé localement par FFmpeg.
+NewsReel assemble un journal vertical dans `output/<run_id>/newsreel_final.mp4`. Le run par défaut contient trois sujets et envoie **un seul batch Modal** pour les reporters. Agnes prépare le scénario et les images; le modèle image par défaut est `agnes-image-2.5-flash` avec `size="1K"` et `ratio="9:16"`. Edge TTS génère la voix du présentateur; le plateau est animé et le montage final est réalisé localement par FFmpeg.
 
 ## Intégration FastH3
 
@@ -88,7 +88,8 @@ $env:NEWSREEL_FFPROBE = "C:\tools\ffmpeg\bin\ffprobe.exe"
    $env:AGNES_API_BASE_URL = "https://apihub.agnes-ai.com/v1"
    $env:AGNES_TEXT_MODEL = "agnes-2.5-flash"
    $env:AGNES_IMAGE_MODEL = "agnes-image-2.5-flash"
-   $env:AGNES_IMAGE_SIZE = "768x1344"
+   $env:AGNES_IMAGE_SIZE = "1K"
+   $env:AGNES_IMAGE_RATIO = "9:16"
    $env:NEWSREEL_MODAL_APP = "newsreel-fasth3"
    $env:NEWSREEL_MODAL_FUNCTION = "render_h3_batch"
    python bridge.py

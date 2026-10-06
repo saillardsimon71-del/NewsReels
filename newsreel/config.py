@@ -27,7 +27,8 @@ class Settings:
     agnes_base_url: str = "https://apihub.agnes-ai.com/v1"
     agnes_text_model: str = "agnes-2.5-flash"
     agnes_image_model: str = "agnes-image-2.5-flash"
-    agnes_image_size: str = "768x1344"
+    agnes_image_size: str = "1K"
+    agnes_image_ratio: str = "9:16"
     agnes_timeout_seconds: int = 180
     modal_app_name: str = "newsreel-fasth3"
     modal_function_name: str = "render_h3_batch"
@@ -76,7 +77,8 @@ class Settings:
             ),
             agnes_text_model=os.getenv("AGNES_TEXT_MODEL", "agnes-2.5-flash"),
             agnes_image_model=os.getenv("AGNES_IMAGE_MODEL", "agnes-image-2.5-flash"),
-            agnes_image_size=os.getenv("AGNES_IMAGE_SIZE", "768x1344"),
+            agnes_image_size=os.getenv("AGNES_IMAGE_SIZE", "1K"),
+            agnes_image_ratio=os.getenv("AGNES_IMAGE_RATIO", "9:16"),
             agnes_timeout_seconds=int(os.getenv("AGNES_TIMEOUT_SECONDS", "180")),
             modal_app_name=os.getenv("NEWSREEL_MODAL_APP", "newsreel-fasth3"),
             modal_function_name=os.getenv("NEWSREEL_MODAL_FUNCTION", "render_h3_batch"),
