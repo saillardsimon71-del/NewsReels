@@ -36,6 +36,7 @@ H3_MODAL_GPU = "L40S"
 H3_MODAL_CPU = 8
 H3_MODAL_MEMORY_MIB = 98304
 H3_MODAL_TIMEOUT_SECONDS = 5400
+H3_COMFYUI_REVISION = "d49e888586dd8ae012c0667b33466b815fee07f7"
 
 
 def h3_contract_config() -> dict[str, Any]:
@@ -62,23 +63,24 @@ def h3_contract_config() -> dict[str, Any]:
         "modal_max_containers": 1,
         "single_use_containers": True,
         "volume_name": H3_VOLUME_NAME,
+        "comfyui_revision": H3_COMFYUI_REVISION,
     }
 
 
 def build_h3_api_workflow(
     job: dict[str, Any], uploaded_image: str, output_prefix: str
 ) -> dict[str, dict[str, Any]]:
-    """Build the FastH3 ComfyUI API graph in code for one reporter clip.
+    """Build the FastH3 ComfyUI API graph in code for one H3 clip.
 
     The stable node IDs and loader inputs are intentionally identical for every job in a
     batch. ComfyUI therefore keeps/reuses the loaded checkpoint, text encoder and VAEs
-    while each prompt changes only the reporter image, prompt, seed and output filename.
+    while each prompt changes only the input image, prompt, seed and output filename.
     """
     prompt = str(job.get("prompt", "")).strip()
     if not prompt:
-        raise ValueError("Prompt reporter vide: impossible de construire le graphe FastH3.")
+        raise ValueError("Prompt H3 vide: impossible de construire le graphe FastH3.")
     if not uploaded_image:
-        raise ValueError("Image reporter ComfyUI absente pour construire le graphe FastH3.")
+        raise ValueError("Image H3 ComfyUI absente pour construire le graphe FastH3.")
     if not output_prefix:
         raise ValueError("Préfixe de sortie vide pour construire le graphe FastH3.")
 
