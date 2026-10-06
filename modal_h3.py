@@ -297,36 +297,6 @@ def _mount_volume_models() -> None:
             f"Volume Modal {H3_VOLUME_NAME} vide ou non monté à {MODELS_ROOT}. "
             "Le worker ne télécharge ni ne remplace les modèles H3."
         )
-    target_root = COMFYUI_DIR / "models"
-    target_root.mkdir(parents=True, exist_ok=True)
-    categories = (
-        "diffusion_models",
-        "text_encoders",
-        "vae",
-        "loras",
-        "clip",
-        "checkpoints",
-    )
-    for category in categories:
-        target = target_root / category
-        if target.is_symlink():
-            continue
-        if target.exists():
-            if target.is_dir() and any(target.iterdir()):
-                raise RuntimeError(
-                    f"Répertoire ComfyUI {category} déjà peuplé hors du volume; "
-                    "le worker refuse d'utiliser des poids différents de fasth3-models."
-                )
-            if target.is_dir():
-                target.rmdir()
-            else:
-                target.unlink()
-        candidates = [path for path in MODELS_ROOT.rglob(category) if path.is_dir()]
-        source = MODELS_ROOT / category if (MODELS_ROOT / category).is_dir() else None
-        if source is None and candidates:
-            source = candidates[0]
-        if source is not None:
-            target.symlink_to(source, target_is_directory=True)
 
     model_locations = (
         ("diffusion_models", H3_MODEL_FILES["unet"]),
@@ -334,15 +304,33 @@ def _mount_volume_models() -> None:
         ("vae", H3_MODEL_FILES["video_vae"]),
         ("vae", H3_MODEL_FILES["audio_vae"]),
     )
-    missing = [
-        f"{category}/{filename}"
+    sources = [
+        (category, filename, MODELS_ROOT / category / filename)
         for category, filename in model_locations
-        if not (target_root / category / filename).is_file()
     ]
+    missing = [str(source) for _, _, source in sources if not source.is_file()]
     if missing:
         raise RuntimeError(
             "Poids FastH3 exacts absents du volume fasth3-models: " + ", ".join(missing)
         )
+
+    target_root = COMFYUI_DIR / "models"
+    for category, filename, source in sources:
+        destination_dir = target_root / category
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        destination = destination_dir / filename
+
+        if destination.is_symlink():
+            if destination.resolve(strict=False) == source.resolve(strict=True):
+                continue
+            raise RuntimeError(
+                f"Lien de poids ComfyUI incorrect, refus de l'écraser: {destination}"
+            )
+        if destination.exists():
+            raise RuntimeError(
+                f"Fichier de poids ComfyUI déjà présent, refus de l'écraser: {destination}"
+            )
+        destination.symlink_to(source, target_is_directory=False)
 
 
 def _start_comfyui() -> subprocess.Popen[bytes]:
