@@ -131,8 +131,18 @@ de consommer un appel Agnes.
 
 ## Lancer le studio
 
+Commande directe :
+
 ```powershell
 python bridge.py
+```
+
+Ou avec les scripts Windows fournis :
+
+```powershell
+.\scripts\preflight.ps1
+.\scripts\deploy-modal.ps1
+.\scripts\start.ps1
 ```
 
 Ouvrir :
