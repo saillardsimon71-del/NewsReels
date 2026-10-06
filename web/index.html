@@ -377,10 +377,12 @@
     if (manifest.status === "complete" && manifest.final_file) {
       renderFinal(manifest, runId); $("startButton").disabled = false; $("demoButton").disabled = false;
       clearInterval(pollTimer); pollTimer = null; log(`JT prêt · ${manifest.final_duration_seconds}s · ${manifest.final_file}`);
+      await refreshRecentRuns(runId);
     } else if (manifest.status === "failed") {
       $("startButton").disabled = false; $("demoButton").disabled = false;
       const errors = (manifest.errors || []).map((e) => e.message).join("\n") || "Erreur de pipeline sans détail.";
       showNotice(errors); log(`Échec du run ${runId}: ${errors}`); clearInterval(pollTimer); pollTimer = null;
+      await refreshRecentRuns(runId);
     }
     if (manifest.status === "running" || manifest.status === "queued") renderFinal(manifest, runId);
   }
