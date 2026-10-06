@@ -101,10 +101,27 @@ def test_video_prompts_keep_comedy_direction_and_h3_french_dialogue() -> None:
     reporter_prompt = build_reporter_video_prompt(
         segment, "wes_anderson", "electric_coral_cyan", 10.125
     )
-    assert "VISUAL GAG" in host_prompt
-    assert "STANISLAVSKI" in host_prompt
-    assert "<d>[French] " in host_prompt
-    assert "COMPLETE COMEDIC FIELD-REPORT SKETCH" in reporter_prompt
-    assert "CRITICAL DIALOGUE RULE" in reporter_prompt
-    assert "LIP SYNC" not in reporter_prompt
-    assert "<d>[French] " in reporter_prompt
+
+    alignment = (
+        "For the target video, at 0.00 seconds into the target video, "
+        "<Picture 1> (from [Shot 1]) is fully referenced."
+    )
+    for prompt in (host_prompt, reporter_prompt):
+        assert prompt.startswith(alignment + "\n\n")
+        assert "integrated_multimodal_description: [Shot 1]" in prompt
+        assert "\n\noverall_soundscape:" in prompt
+        assert prompt.endswith("\n\nnon_diegetic_music: N/A")
+        assert prompt.count("<d>[French] ") == 1
+        assert prompt.count("</d>") == 1
+        assert "CRITICAL DIALOGUE RULE" not in prompt
+        assert "HOST:" not in prompt
+        assert "REPORTER:" not in prompt
+
+    host_line = segment["host_dialogue"]
+    reporter_line = segment["reporter"]["dialogue"]
+    assert host_prompt.count(host_line) == 1
+    assert reporter_prompt.count(reporter_line) == 1
+    assert f"<d>[French] {host_line}</d>" in host_prompt
+    assert f"<d>[French] {reporter_line}</d>" in reporter_prompt
+    assert "visual joke" in host_prompt.lower()
+    assert "visual gag" in reporter_prompt.lower()

@@ -53,16 +53,20 @@ class H3BatchResult:
     generation_seconds: float | None = None
 
 
-def _stability_block(role: str) -> str:
-    return "\n".join(
+def _with_stability(prompt: str, role: str) -> str:
+    marker = "\n\noverall_soundscape:"
+    if marker not in prompt:
+        raise ValueError("Le prompt H3 structuré ne contient pas overall_soundscape.")
+    stability = " ".join(
         [
-            f"Use the supplied first frame as the exact visual identity reference for this {role} shot.",
+            f"Throughout the shot, preserve <Picture 1> as the exact visual identity reference for this {role}.",
             "Preserve the same face, hairstyle, costume, set design, color palette and overall composition from the Agnes keyframe.",
-            "Keep anatomy, faces, hands and fingers coherent from frame to frame; preserve every character's identity.",
-            "Motion must remain physically coherent even when the visual gag is absurd. Avoid morphing, duplication, identity drift or sudden set replacement.",
+            "Keep anatomy, faces, hands and fingers coherent from frame to frame and preserve every character's identity.",
+            "Motion remains physically coherent even when the visual gag is absurd; avoid morphing, duplication, identity drift or sudden set replacement.",
             "Keep camera movement controlled enough to protect facial consistency and lip sync.",
         ]
     )
+    return prompt.replace(marker, f" {stability}{marker}", 1)
 
 
 def build_host_prompt(
@@ -83,7 +87,7 @@ def build_host_prompt(
         H3_DURATION_SECONDS,
         intensity,
     )
-    return creative + "\n" + _stability_block("studio host")
+    return _with_stability(creative, "studio host")
 
 
 def build_reporter_prompt(
@@ -102,7 +106,7 @@ def build_reporter_prompt(
         H3_DURATION_SECONDS,
         intensity,
     )
-    return creative + "\n" + _stability_block("field reporter")
+    return _with_stability(creative, "field reporter")
 
 
 def create_h3_jobs(
