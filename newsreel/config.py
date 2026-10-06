@@ -23,7 +23,6 @@ class Settings:
     output_dir: Path | None = None
     ffmpeg_path: str | None = None
     ffprobe_path: str | None = None
-    tts_voice: str = "fr-FR-DeniseNeural"
     agnes_base_url: str = "https://apihub.agnes-ai.com/v1"
     agnes_text_model: str = "agnes-2.5-flash"
     agnes_image_model: str = "agnes-image-2.5-flash"
@@ -71,7 +70,6 @@ class Settings:
             output_dir=_resolve_path(output, root) if output else root / "output",
             ffmpeg_path=os.getenv("NEWSREEL_FFMPEG"),
             ffprobe_path=os.getenv("NEWSREEL_FFPROBE"),
-            tts_voice=os.getenv("NEWSREEL_TTS_VOICE", "fr-FR-DeniseNeural"),
             agnes_base_url=os.getenv("AGNES_API_BASE_URL", "https://apihub.agnes-ai.com/v1").rstrip(
                 "/"
             ),
