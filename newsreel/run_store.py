@@ -72,6 +72,43 @@ class RunStore:
             raise FileNotFoundError(f"Manifest introuvable pour {run_id}")
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def list_runs(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent persisted runs without trusting directory names as metadata."""
+        limit = max(1, min(int(limit), 50))
+        runs: list[dict[str, Any]] = []
+        with self._lock:
+            candidates = sorted(
+                (path for path in self.output_root.iterdir() if path.is_dir()),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+            for run_dir in candidates:
+                manifest_path = run_dir / "run_manifest.json"
+                if not manifest_path.is_file():
+                    continue
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    run_id = validate_run_id(str(manifest.get("run_id", "")))
+                except (OSError, json.JSONDecodeError, ValueError):
+                    continue
+                if run_dir.name != run_id:
+                    continue
+                runs.append(
+                    {
+                        "run_id": run_id,
+                        "status": manifest.get("status", "unknown"),
+                        "created_at": manifest.get("created_at"),
+                        "updated_at": manifest.get("updated_at"),
+                        "query": manifest.get("query", ""),
+                        "requested_subject_count": manifest.get("requested_subject_count"),
+                        "final_file": manifest.get("final_file"),
+                        "summary": manifest.get("summary"),
+                    }
+                )
+                if len(runs) >= limit:
+                    break
+        return runs
+
     def update(self, run_id: str, **changes: Any) -> dict[str, Any]:
         with self._lock:
             run_dir = self.path(run_id)
