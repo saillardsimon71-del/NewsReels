@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NewsReel Studio — Le JT</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+--bg:#0a0a12;--bg2:#12121c;--bg3:#1a1a28;
+--panel:#16161f;--border:#2a2a3a;
+--ink:#e8e6e0;--dim:#8a8896;--faint:#4a4858;
+--acc:#e5c15a;--acc2:#e87b35;
+--ok:#4a9d6a;--err:#c85a4a;--warn:#d4a017;
+--r:4px;--fs:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+--fm:ui-monospace,'SF Mono',Menlo,monospace;
+}
+html,body{background:var(--bg)}
+body{font-family:var(--fs);background:var(--bg);color:var(--ink);min-height:100vh;padding:1.5rem 1rem 24rem;font-size:15px;line-height:1.55;max-width:900px;margin:0 auto}
+header{margin-bottom:2rem;text-align:center;padding:1rem 0 1.5rem;position:relative}
+header::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:120px;height:1px;background:linear-gradient(90deg,transparent,var(--acc),transparent);opacity:.5}
+h1{font-size:2rem;font-weight:300;margin-bottom:.5rem;background:linear-gradient(135deg,var(--acc2),var(--acc));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{font-size:.9rem;color:var(--dim);font-style:italic}
+.toast{position:fixed;top:1.5rem;left:50%;transform:translateX(-50%) translateY(-120px);background:var(--bg3);color:var(--ink);border:1px solid var(--border);border-left:3px solid var(--acc);padding:.85rem 1.4rem;border-radius:var(--r);font-size:.85rem;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:1000;opacity:0;transition:transform .35s cubic-bezier(.2,.9,.3,1.2),opacity .35s;max-width:90vw;text-align:center;display:flex;align-items:center;gap:.6rem}
+.toast.visible{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.success{border-left-color:var(--ok)}.toast.error{border-left-color:var(--err)}.toast.warn{border-left-color:var(--warn)}
+.banner{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--acc);padding:1rem 1.15rem;border-radius:var(--r);font-size:.8rem;color:var(--dim);margin-bottom:1.2rem;line-height:1.6}
+.banner strong{color:var(--ink)}.banner .hl{color:var(--acc)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:1.2rem 1.3rem;margin-bottom:1rem}
+.panel.ok{box-shadow:inset 3px 0 0 var(--ok)}
+input[type=password],input[type=text]{width:100%;padding:.85rem 1rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-family:var(--fm);font-size:.82rem;margin-bottom:.6rem}
+input:focus{outline:none;border-color:var(--acc)}
+.btn{width:100%;padding:.85rem 1.2rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:.85rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-bottom:.7rem}
+.btn:hover{background:var(--bg3)}
+.btn-primary{border-color:var(--acc);background:linear-gradient(135deg,rgba(232,123,53,.2),rgba(229,193,90,.15));color:var(--acc);font-size:1rem;padding:1.2rem;letter-spacing:.2em}
+.btn-primary:disabled{opacity:.3;cursor:not-allowed}
+.btn-stop{border-color:var(--err);color:var(--err);background:transparent;display:none}
+.btn-stop.visible{display:block}
+.status{font-size:.75rem;padding:.6rem .9rem;border-radius:var(--r);margin-bottom:.5rem;display:flex;align-items:center;gap:.6rem;background:var(--bg2);color:var(--dim);border:1px solid var(--border)}
+.status.ok{background:rgba(74,157,106,.08);color:var(--ok);border-color:rgba(74,157,106,.3)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--faint);flex-shrink:0}
+.status.ok .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.hint{font-size:.72rem;color:var(--dim);margin-top:.5rem}
+.hint a{color:var(--acc);text-decoration:none}
+.stat{font-size:.72rem;color:var(--dim);margin-top:.6rem;padding:.5rem .7rem;background:var(--bg2);border-radius:var(--r);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.3rem;border:1px solid var(--border);font-family:var(--fm)}
+.section{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);margin-bottom:1rem;overflow:hidden}
+.section-header{padding:1rem 1.2rem;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center}
+.section-title{font-size:.85rem;text-transform:uppercase;letter-spacing:.2em;color:var(--ink);font-weight:500;display:flex;align-items:center;gap:.6rem}
+.badge{display:inline-block;padding:.15rem .55rem;background:transparent;color:var(--acc);border:1px solid var(--border);border-radius:2px;font-size:.6rem;letter-spacing:.15em;font-weight:600}
+.chevron{font-size:.7rem;color:var(--faint);transition:transform .3s}
+.section.open .chevron{transform:rotate(180deg);color:var(--acc)}
+.section-body{max-height:0;overflow:hidden;transition:max-height .4s ease}
+.section.open .section-body{max-height:8000px}
+.section-content{padding:0 1.2rem 1.2rem}
+.row{margin-bottom:1rem}
+.label{display:block;font-size:.72rem;color:var(--dim);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.15em;font-weight:600}
+select{width:100%;padding:.8rem .95rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:.88rem;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23e5c15a' d='M0 0l5 6 5-6z'/></svg>");background-repeat:no-repeat;background-position:right .95rem center;background-size:10px}
+select:focus{outline:none;border-color:var(--acc)}
+select option{background:var(--bg2);color:var(--ink)}
+.palette-row{display:flex;gap:.5rem;flex-wrap:wrap}
+.palette-btn{flex:1;min-width:100px;padding:.7rem .5rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--dim);font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .2s;text-align:center}
+.palette-btn:hover{border-color:var(--faint);color:var(--ink)}
+.palette-btn.active{border-color:var(--acc);color:var(--acc);background:rgba(229,193,90,.06)}
+.news-list{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2)}
+.news-item{padding:.7rem .9rem;border-bottom:1px solid var(--border);font-size:.8rem;display:flex;gap:.6rem;align-items:flex-start}
+.news-item:last-child{border-bottom:none}
+.news-rank{font-family:var(--fm);font-size:.65rem;color:var(--acc);font-weight:700;flex-shrink:0;min-width:20px}
+.news-title{color:var(--ink);line-height:1.4}
+.news-source{font-size:.65rem;color:var(--faint);margin-top:.2rem}
+.phase-bar{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--acc);border-radius:var(--r);padding:.9rem 1rem;margin-bottom:1rem;display:none}
+.phase-bar.visible{display:block}
+.phase-steps{display:flex;gap:.4rem;margin-bottom:.7rem;flex-wrap:wrap}
+.phase-step{flex:1;min-width:60px;padding:.5rem .4rem;border-radius:var(--r);background:var(--bg2);border:1px solid var(--border);font-size:.55rem;text-transform:uppercase;letter-spacing:.06em;text-align:center;color:var(--faint);font-weight:600}
+.phase-step.active{color:var(--acc);border-color:var(--acc);background:rgba(229,193,90,.06)}
+.phase-step.done{color:var(--ok);border-color:rgba(74,157,106,.3);background:rgba(74,157,106,.05)}
+.phase-info{font-size:.75rem;font-family:var(--fm);color:var(--dim);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.4rem}
+.queue{margin-top:1.2rem}
+.queue-summary{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--acc);border-radius:var(--r);padding:.8rem 1rem;margin-bottom:.7rem;font-size:.78rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;font-family:var(--fm)}
+.qs-progress{color:var(--acc);font-weight:600}
+.qs-eta{color:var(--dim)}
+.queue-item{display:flex;align-items:center;gap:.8rem;padding:.75rem .9rem;border-radius:var(--r);border:1px solid var(--border);margin-bottom:.4rem;background:var(--panel);font-size:.82rem}
+.queue-item.pending{opacity:.45}
+.queue-item.creating{border-color:var(--warn);background:linear-gradient(90deg,rgba(212,160,23,.05),var(--panel))}
+.queue-item.processing{border-color:var(--acc);background:linear-gradient(90deg,rgba(74,123,200,.06),var(--panel))}
+.queue-item.done{border-color:var(--ok);background:linear-gradient(90deg,rgba(74,157,106,.05),var(--panel))}
+.queue-item.failed{border-color:var(--err);background:linear-gradient(90deg,rgba(200,90,74,.05),var(--panel))}
+.q-icon{font-size:1rem;width:1.5rem;text-align:center;flex-shrink:0}
+.q-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-status{font-size:.7rem;color:var(--dim);text-align:right;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--fm)}
+.jt-panel{display:none;margin-top:1.5rem}
+.jt-panel.visible{display:block}
+.jt-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:1.2rem 1.3rem;margin-bottom:1rem}
+.jt-title{font-size:1.4rem;color:var(--acc);margin-bottom:.4rem;text-align:center}
+.jt-meta{font-size:.7rem;color:var(--dim);text-align:center;letter-spacing:.15em;text-transform:uppercase;margin-bottom:1.2rem;font-family:var(--fm)}
+.host-tag{display:inline-flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.35rem .8rem;border-radius:999px;background:rgba(200,176,224,.1);border:1px solid var(--acc);color:var(--ink);margin:0 auto 1rem}
+.seg-block{border-left:2px solid var(--border);padding-left:1rem;margin-bottom:1.2rem}
+.seg-block.active{border-left-color:var(--acc)}
+.seg-block.done{border-left-color:var(--ok)}
+.seg-num{font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-family:var(--fm);margin-bottom:.3rem}
+.seg-headline{font-size:1rem;color:var(--acc);line-height:1.35;margin-bottom:.4rem}
+.seg-summary{font-size:.78rem;color:var(--ink);background:rgba(229,193,90,.05);border-left:2px solid var(--acc);padding:.5rem .7rem;border-radius:2px;margin-bottom:.5rem;line-height:1.5}
+.seg-cast{font-size:.7rem;color:var(--ink);margin-top:.3rem;padding:.35rem .6rem;background:rgba(168,216,200,.06);border-left:2px solid var(--ok);border-radius:2px}
+.seg-dialogue{font-size:.88rem;font-style:italic;color:var(--ink);line-height:1.5;padding:.35rem .6rem;margin:.3rem 0}
+.seg-dialogue .spk{font-size:.6rem;text-transform:uppercase;letter-spacing:.15em;color:var(--acc);font-style:normal;font-weight:600;display:block;margin-bottom:.15rem}
+.seg-action{font-size:.7rem;color:var(--acc2);margin-top:.3rem;padding:.3rem .5rem;background:rgba(232,123,53,.06);border-left:2px solid var(--acc2);border-radius:2px}
+.seg-loc{font-size:.7rem;color:var(--ok);margin-top:.3rem}
+.gallery{margin-top:1.8rem}
+.gallery-title{font-size:1.1rem;color:var(--ink);margin-bottom:1rem;letter-spacing:.15em;text-transform:uppercase;text-align:center;padding-bottom:.8rem;position:relative}
+.gallery-title::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:60px;height:1px;background:linear-gradient(90deg,transparent,var(--acc),transparent)}
+.jt-segment{margin-bottom:2rem;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--panel)}
+.jt-segment-info{padding:1rem 1.1rem;background:rgba(229,193,90,.04);border-bottom:1px solid var(--border)}
+.jt-seg-headline{font-size:1rem;color:var(--acc);line-height:1.35;margin-bottom:.4rem}
+.jt-seg-summary{font-size:.78rem;color:var(--ink);line-height:1.5}
+.jt-segment-videos{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;padding:.8rem}
+@media(max-width:480px){.jt-segment-videos{grid-template-columns:1fr}}
+.jt-video{border-radius:var(--r);overflow:hidden;border:1px solid var(--border);background:#000}
+.jt-video video{width:100%;display:block;aspect-ratio:9/16;object-fit:cover;background:#000}
+.jt-video-label{padding:.5rem .6rem;background:var(--bg2);font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;font-family:var(--fm);display:flex;justify-content:space-between;gap:.4rem}
+.jt-video.host .jt-video-label{color:var(--acc)}
+.jt-video.reporter .jt-video-label{color:var(--ok)}
+.jt-video-placeholder{display:flex;align-items:center;justify-content:center;aspect-ratio:9/16;color:var(--faint);font-size:.7rem;font-family:var(--fm);background:var(--bg2);border:1px dashed var(--border)}
+.images-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:.6rem;margin-top:1.2rem}
+.image-card{border-radius:var(--r);overflow:hidden;border:1px solid var(--border);background:var(--bg2);position:relative;aspect-ratio:9/16}
+.image-card.loading{display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:.65rem;font-family:var(--fm)}
+.image-card img{width:100%;height:100%;object-fit:cover;display:block}
+.img-label{position:absolute;bottom:0;left:0;right:0;padding:.3rem .5rem;background:linear-gradient(transparent,rgba(10,10,18,.9));font-size:.6rem;font-family:var(--fm);color:var(--acc);letter-spacing:.1em;text-transform:uppercase}
+.image-card.host .img-label{color:var(--acc)}
+.image-card.reporter .img-label{color:var(--ok)}
+.status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg3);border-top:1px solid var(--border);color:var(--ink);padding:.85rem 1.1rem;font-size:.78rem;display:flex;align-items:center;gap:.7rem;transform:translateY(100%);transition:transform .35s cubic-bezier(.2,.9,.3,1);z-index:100;font-family:var(--fm);box-shadow:0 -4px 20px rgba(0,0,0,.4)}
+.status-bar.visible{transform:translateY(0)}
+.spinner{width:12px;height:12px;border:2px solid rgba(229,193,90,.2);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.debug-panel{position:fixed;bottom:0;left:0;right:0;height:260px;background:#05050a;border-top:2px solid var(--acc);z-index:200;display:flex;flex-direction:column;font-family:var(--fm);box-shadow:0 -8px 32px rgba(0,0,0,.7);transition:height .3s ease}
+.debug-panel.collapsed{height:36px}
+.debug-header{display:flex;justify-content:space-between;align-items:center;padding:.5rem .8rem;background:linear-gradient(90deg,#0f0f18,#1a1a28);border-bottom:1px solid var(--border);flex-shrink:0;cursor:pointer;user-select:none}
+.debug-title{font-size:.72rem;color:var(--acc);letter-spacing:.15em;text-transform:uppercase;font-weight:600;display:flex;align-items:center;gap:.5rem}
+.debug-badge{font-size:.6rem;padding:.1rem .4rem;background:var(--acc);color:var(--bg);border-radius:2px;font-weight:700}
+.debug-actions{display:flex;gap:.3rem}
+.debug-actions button{background:transparent;border:1px solid var(--border);color:var(--dim);font-size:.62rem;padding:.25rem .55rem;border-radius:2px;cursor:pointer}
+.debug-actions button:hover{color:var(--acc);border-color:var(--acc)}
+.debug-body{flex:1;overflow-y:auto;padding:.5rem .7rem 1rem;font-size:.72rem;line-height:1.45;color:#c8c8d0}
+.debug-entry{margin-bottom:.3rem;padding:.25rem .4rem;border-left:2px solid transparent;border-radius:2px;word-break:break-word}
+.debug-entry.info{border-left-color:var(--faint)}
+.debug-entry.success{border-left-color:var(--ok);background:rgba(74,157,106,.04)}
+.debug-entry.warn{border-left-color:var(--warn);background:rgba(212,160,23,.04)}
+.debug-entry.error{border-left-color:var(--err);background:rgba(200,90,74,.06);color:#f0a0a0}
+.debug-entry.api{border-left-color:var(--acc)}
+.debug-entry.response{border-left-color:var(--acc2)}
+.debug-entry.state{border-left-color:var(--acc2)}
+.debug-entry.ai{border-left-color:var(--acc)}
+.debug-time{color:var(--faint);margin-right:.5rem;font-size:.65rem}
+.debug-cat{color:var(--acc);font-weight:600;margin-right:.4rem;font-size:.65rem}
+.debug-msg{color:#d8d8e0}
+.debug-data{margin-top:.3rem;padding:.4rem .5rem;background:#0a0a12;border:1px solid var(--border);border-radius:2px;font-size:.68rem;color:#a8d8b0;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all;line-height:1.4}
+.hidden{display:none!important}
+@media(max-width:480px){h1{font-size:1.8rem}.images-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))}.phase-step{font-size:.48rem;padding:.35rem .2rem}body{padding-bottom:22rem}.debug-panel{height:220px}}
+</style>
+</head>
+<body>
+
+<header>
+<h1>NewsReel Studio</h1>
+<p class="subtitle">Le JT généré par IA · LTX-2.5 / Modal · Chroniqueur plateau + reporters + figurants liés à l'actualité</p>
+</header>
+
+<div class="banner">
+<strong>Le JT :</strong> un clic. L'IA récupère les <strong class="hl">titres du jour</strong>, crée un <strong class="hl">chroniqueur plateau</strong> et pour chaque info une <strong class="hl">équipe sur place entièrement nouvelle</strong>. Chaque sujet est un <strong class="hl">sketch complet</strong>. Personnages et décors <strong class="hl">rétrofuturistes, drôles et très colorés</strong>. Acting <strong>stanislavskien</strong>. Vidéos générées par <strong class="hl">LTX-2.5 Distilled INT8 ConvRot sur GPU Modal A10G</strong> — <strong class="hl">5 s · 9:16 · 0.4 MP · 24 fps</strong>.
+</div>
+
+<div class="panel" id="api-panel">
+<input type="password" id="api-key-input" placeholder="Collez votre clé API Agnes ici (sk-...)" autocomplete="off" spellcheck="false">
+<button type="button" class="btn" id="api-save-btn">Enregistrer la clé</button>
+<div class="status" id="api-status-line"><span class="dot"></span><span id="api-status-text">Aucune clé API enregistrée</span></div>
+<div class="hint">Clé gratuite sur <a href="https://platform.agnes-ai.com" target="_blank">platform.agnes-ai.com</a> → Settings → API Keys</div>
+<div class="stat" id="stat-line"><span>🖥️ Bridge LTX : <span id="stat-speed">non vérifié</span></span><span id="stat-samples">—</span></div>
+</div>
+
+<button type="button" class="btn btn-primary" id="jt-btn" disabled>
+▶ Lancer le JT
+<span style="display:block;font-size:.65rem;letter-spacing:.15em;color:var(--dim);margin-top:.4rem;font-weight:400;text-transform:none;">News → Résumé IA → Scénario multi-personnages → Images → Batch LTX/Modal</span>
+</button>
+<button type="button" class="btn btn-stop" id="stop-btn">⏹ Arrêter la génération</button>
+
+<div class="phase-bar" id="phase-bar">
+<div class="phase-steps">
+<div class="phase-step" data-phase="text">1 · News</div>
+<div class="phase-step" data-phase="dialogue">2 · Scénario JT</div>
+<div class="phase-step" data-phase="images">3 · Images</div>
+<div class="phase-step" data-phase="videos">4 · Batch LTX</div>
+<div class="phase-step" data-phase="done">5 · JT prêt</div>
+</div>
+<div class="phase-info"><span id="phase-detail">En attente</span><span id="phase-eta"></span></div>
+</div>
+
+<div class="section open" id="section-settings">
+<div class="section-header" data-toggle="section-settings"><span class="section-title">⚙️ Réglages du JT</span><span class="chevron">▼</span></div>
+<div class="section-body"><div class="section-content">
+<div class="row">
+<label class="label">Nombre d'infos au JT</label>
+<select id="seg-count-select">
+<option value="3">3 infos — JT court</option>
+<option value="5" selected>5 infos — JT standard</option>
+<option value="7">7 infos — JT complet</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Catégorie des news</label>
+<select id="news-category">
+<option value="WORLD">🌍 International</option>
+<option value="NATION" selected>🇫🇷 France</option>
+<option value="BUSINESS">💼 Économie</option>
+<option value="TECHNOLOGY">💻 Technologie</option>
+<option value="SCIENCE">🔬 Science</option>
+<option value="HEALTH">🏥 Santé</option>
+<option value="SPORTS">⚽ Sport</option>
+<option value="ENTERTAINMENT">🎬 Culture</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Style de réalisation</label>
+<select id="director-select">
+<option value="wes_anderson" selected>Wes Anderson — symétrie pop, humour deadpan, décors miniatures</option>
+<option value="kubrick">Stanley Kubrick — géométrie, perspective centrale, tension clinique</option>
+<option value="fincher">David Fincher — cadres précis, texture urbaine, contraste contrôlé</option>
+<option value="villeneuve">Denis Villeneuve — monumental, atmosphérique, espace négatif</option>
+<option value="nolan">Christopher Nolan — réalisme spectaculaire, mouvement physique, grande échelle</option>
+<option value="manga_cyberpunk">Manga cyberpunk — encrage nerveux, néons, perspective explosive</option>
+<option value="retro_manga">Manga rétrofuturiste — couleurs franches, machines absurdes, poses théâtrales</option>
+<option value="anime_80s">Anime années 80 — cel shading, couleurs électriques, mecha rétro</option>
+<option value="manga_noir">Manga noir — encrage dense, cadrages expressionnistes, énergie urbaine</option>
+<option value="shonen_pop">Shonen pop — action comique, expressions exagérées, diagonales rapides</option>
+<option value="shojo_futuriste">Shojo futuriste — élégance graphique, décors baroques, couleurs lumineuses</option>
+<option value="cyberpunk_tokyo">Cyberpunk Tokyo — néons saturés, foule étrange, technologie rétro</option>
+<option value="french_bd_pop">BD française pop — aplats francs, lignes nettes, humour visuel</option>
+<option value="comic_retro">Comic rétrofuturiste — affiches pulp, couleurs primaires, action théâtrale</option>
+<option value="clay_satire">Satire cinéma de plateau — matières artisanales, costumes extravagants, décor impossible</option>
+<option value="documentary_color">Documentaire couleur halluciné — caméra mobile, réel décalé, couleurs intenses</option>
+<option value="mockumentary_retro">Mockumentaire rétrofuturiste — faux reportage sérieux, situations absurdes</option>
+<option value="giallo_pop">Giallo pop — éclairage coloré, suspense grotesque, compositions baroques</option>
+<option value="bollywood_futurist">Spectacle musical futuriste sans musique — chorégraphie visuelle, couleurs explosives</option>
+<option value="sci_fi_pulp">Science-fiction pulp — décors cosmiques, costumes rétro, machines improbables</option>
+<option value="space_opera_comedy">Space opera comique — architecture cosmique, silhouettes extravagantes, grandiose absurde</option>
+<option value="stopmotion_surreal">Stop-motion surréaliste — textures physiques, proportions impossibles, humour visuel</option>
+<option value="noir_neon">Noir néon — clair-obscur coloré, pluie artificielle, silhouettes graphiques</option>
+<option value="vhs_future">VHS futuriste — chroma intense, aberrations optiques, gadgets analogiques</option>
+<option value="retro_documentary">Faux documentaire rétro — optiques anciennes, costumes 60s futuristes, naturel comique</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Palette dominante</label>
+<div class="palette-row">
+<button type="button" class="palette-btn active" data-palette="electric_coral_cyan">🪸 Corail électrique & Cyan</button>
+<button type="button" class="palette-btn" data-palette="acid_lime_purple">🟢 Lime acide & Violet</button>
+<button type="button" class="palette-btn" data-palette="turquoise_orange">🩵 Turquoise & Orange solaire</button>
+<button type="button" class="palette-btn" data-palette="fuchsia_yellow">💗 Fuchsia & Jaune laser</button>
+<button type="button" class="palette-btn" data-palette="cobalt_tangerine">🔵 Cobalt & Mandarine</button>
+<button type="button" class="palette-btn" data-palette="emerald_pink">💚 Émeraude & Rose fluo</button>
+<button type="button" class="palette-btn" data-palette="violet_lime">🟣 Violet ultraviolet & Lime</button>
+<button type="button" class="palette-btn" data-palette="red_cyan">🔴 Rouge signal & Cyan</button>
+<button type="button" class="palette-btn" data-palette="gold_azure">🟡 Or électrique & Azur</button>
+<button type="button" class="palette-btn" data-palette="magenta_teal">🩷 Magenta & Turquoise</button>
+<button type="button" class="palette-btn" data-palette="orange_purple">🟠 Orange mandarine & Prune</button>
+<button type="button" class="palette-btn" data-palette="lime_pink">🍋 Citron vert & Rose bonbon</button>
+<button type="button" class="palette-btn" data-palette="ultraviolet_aqua">⚡ Ultraviolet & Aqua</button>
+<button type="button" class="palette-btn" data-palette="scarlet_turquoise">🟥 Écarlate & Turquoise</button>
+<button type="button" class="palette-btn" data-palette="royal_blue_lime">👑 Bleu royal & Lime</button>
+<button type="button" class="palette-btn" data-palette="copper_electric_blue">🟤 Cuivre & Bleu électrique</button>
+</div>
+</div>
+<div class="row">
+<label class="label">Durée de chaque vidéo LTX</label>
+<select id="duration-select">
+<option value="5" selected>5 secondes (validé LTX)</option>
+</select>
+<div class="hint">D'autres durées seront réactivées après validation du premier JT complet.</div>
+</div>
+<div class="row">
+<label class="label">Intensité du mouvement</label>
+<select id="intensity-select">
+<option value="subtle">Subtile — contemplatif</option>
+<option value="moderate">Modérée — élégante</option>
+<option value="strong" selected>Forte — cinématographique</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Résolution vidéo LTX</label>
+<select id="resolution-select">
+<option value="720P" selected>720P (0.4 MP) — standard LTX</option>
+</select>
+</div>
+</div></div>
+</div>
+
+<div class="section" id="section-news-preview">
+<div class="section-header" data-toggle="section-news-preview"><span class="section-title">📰 Aperçu des news <span class="badge">optionnel</span></span><span class="chevron">▼</span></div>
+<div class="section-body"><div class="section-content">
+<div class="news-list" id="news-list">
+<div style="padding:1.2rem;text-align:center;color:var(--faint);font-size:.8rem;">Cliquez sur « Lancer le JT » pour charger et analyser les news.</div>
+</div>
+<div style="font-size:.72rem;color:var(--dim);margin-top:.6rem;" id="news-status">En attente.</div>
+</div></div>
+</div>
+
+<div class="jt-panel" id="jt-panel">
+<div class="jt-card" id="jt-card"></div>
+<span id="raw-scenario-toggle" style="font-size:.62rem;color:var(--acc);cursor:pointer;margin-top:.4rem;border-bottom:1px dotted var(--border);display:inline-block;">▸ Voir la réponse brute du scénario (JSON)</span>
+<pre id="raw-scenario" style="margin-top:.6rem;padding:.7rem;background:#05050a;border:1px solid var(--border);border-radius:var(--r);font-family:var(--fm);font-size:.68rem;color:#a8d8b0;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-all;line-height:1.45;display:none;"></pre>
+<div class="images-grid" id="images-grid"></div>
+</div>
+
+<div class="queue" id="queue" style="display:none;"></div>
+
+<div class="gallery" id="gallery" style="display:none;">
+<div class="gallery-title">Le JT — vidéos LTX</div>
+<div id="gallery-grid"></div>
+</div>
+
+<div class="section" id="section-medialog" style="margin-top:1.5rem;">
+<div class="section-header" data-toggle="section-medialog"><span class="section-title">🗂️ Journal des médias générés <span class="badge" id="medialog-count">0</span></span><span class="chevron">▼</span></div>
+<div class="section-body"><div class="section-content">
+<div class="media-log" id="media-log">
+<div style="font-size:.72rem;color:var(--dim);font-family:var(--fm);">Les URLs des images et vidéos apparaîtront ici au fur et à mesure.</div>
+</div>
+</div></div>
+</div>
+
+<div class="status-bar" id="status-bar"><div class="spinner"></div><span id="status-text">Préparation…</span></div>
+
+<div class="toast" id="toast"><span id="toast-icon">✓</span><span id="toast-text">Message</span></div>
+
+<div class="debug-panel" id="debug-panel">
+<div class="debug-header" id="debug-header">
+<div class="debug-title">🖥️ Console de débogage <span class="debug-badge" id="debug-count">0</span></div>
+<div class="debug-actions">
+<button type="button" id="debug-copy-btn">Copier</button>
+<button type="button" id="debug-clear-btn">Effacer</button>
+<button type="button" id="debug-collapse-btn">−</button>
+</div>
+</div>
+<div class="debug-body" id="debug-body"></div>
+</div>
+
+<canvas id="noSleepCanvas" width="2" height="2"></canvas>
+<video id="noSleepVideo" playsinline muted loop></video>
+
+<script>
+/* =============================================================================
+   NewsReel Studio — LTX-2.5 / Modal
+   Agnes texte + images INCHANGÉS. Agnes Vidéo remplacé par batch LTX.
+   Durée LTX : 5 s (validée) · 9:16 · 0.4 MP · 24 fps · prompt enhance OFF.
+   ============================================================================= */
+const API_BASE      = 'https://apihub.agnes-ai.com/v1';
+const MODEL_TEXT    = 'agnes-2.5-flash';
+const MODEL_IMAGE   = 'agnes-image-2.5-flash';
+const LTX_BRIDGE    = 'http://127.0.0.1:8765';
+const LTX_AVG_SECONDS_PER_CLIP = 60;
+
+const GOOGLE_NEWS_RSS = {
+  WORLD:'https://news.google.com/rss/headlines/section/topic/WORLD?hl=fr&gl=FR&ceid=FR:fr',
+  NATION:'https://news.google.com/rss/headlines/section/topic/NATION?hl=fr&gl=FR&ceid=FR:fr',
+  BUSINESS:'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=fr&gl=FR&ceid=FR:fr',
+  TECHNOLOGY:'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=fr&gl=FR&ceid=FR:fr',
+  SCIENCE:'https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=fr&gl=FR&ceid=FR:fr',
+  HEALTH:'https://news.google.com/rss/headlines/section/topic/HEALTH?hl=fr&gl=FR&ceid=FR:fr',
+  SPORTS:'https://news.google.com/rss/headlines/section/topic/SPORTS?hl=fr&gl=FR&ceid=FR:fr',
+  ENTERTAINMENT:'https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=fr&gl=FR&ceid=FR:fr'
+};
+
+const DIRECTORS = {
+  wes_anderson:{label:'Wes Anderson',style:'Perfect bilateral symmetry, centered frontal composition, planimetric staging, dry deadpan comedy, whimsical miniature-like production design, precise theatrical blocking.',camera:'Locked symmetrical frames, lateral whip pans, short dolly-ins, graphic centered compositions.',lighting:'Soft studio light with deliberate practical color blocks and clean separation.',film:'35mm-inspired texture, subtle halation, crisp production design.'},
+  kubrick:{label:'Stanley Kubrick',style:'One-point perspective, obsessive geometry, symmetrical architecture, unsettling precision, theatrical absurdity beneath clinical seriousness.',camera:'Slow zooms, centered wide angles, controlled tracking, geometric vanishing points.',lighting:'Hard motivated practicals with sculpted pools of light.',film:'35mm-inspired grain, deep focus, high micro-detail.'},
+  fincher:{label:'David Fincher',style:'Controlled compositions, precise urban detail, restrained camera motion, tactile surfaces, darkly comic seriousness.',camera:'Locked frames, exact push-ins, measured tracking, selective handheld impact.',lighting:'Motivated practicals with controlled contrast and saturated colored sources.',film:'Clean digital cinema with subtle film texture.'},
+  villeneuve:{label:'Denis Villeneuve',style:'Monumental scale, graphic negative space, atmospheric depth, strange futuristic architecture, solemn spectacle.',camera:'Long-lens compression, slow tracking, crane reveals, monumental wides.',lighting:'Volumetric atmosphere, strong backlight, sculpted practical color.',film:'Large-format cinematic clarity, restrained texture.'},
+  nolan:{label:'Christopher Nolan',style:'Physical realism, practical spectacle, urgent spatial storytelling, massive mechanical environments, serious performances inside absurd events.',camera:'Dynamic tracking, handheld impact shots, wide practical-action coverage.',lighting:'Naturalistic key light mixed with motivated practical effects.',film:'Large-format cinematic sharpness, realistic motion blur.'},
+  manga_cyberpunk:{label:'Manga cyberpunk',style:'High-energy manga composition fused with retrofuturist cyberpunk, expressive faces, ink-like contour emphasis, holographic architecture, absurd gadgets, explosive visual punctuation.',camera:'Extreme perspective, Dutch angles, snap zooms, diagonal action lines, rapid reframing.',lighting:'Hard neon rims, colored reflections, luminous signs, saturated atmosphere.',film:'Graphic ink texture blended with cinematic depth; vivid full color.'},
+  retro_manga:{label:'Manga rétrofuturiste',style:'1960s-1980s manga futurism, optimistic machines, ridiculous helmets, giant buttons, playful mechanical design, bold graphic silhouettes.',camera:'Graphic panel-like framing, dramatic low angles, fast push-ins, wide comic tableaux.',lighting:'Bright studio illumination with strong colored gels.',film:'Printed-ink texture, crisp cel-like color separation.'},
+  anime_80s:{label:'Anime années 80',style:'Retro anime visual language, cel-shaded characters, mechanical detail, expressive reaction shots, colorful futuristic interiors, playful melodrama.',camera:'Dynamic anime perspective, crash zooms, dramatic close-ups, wide establishing shots.',lighting:'Hard rim lights, colored gradients, luminous practicals.',film:'Cel-shaded finish with subtle analog texture.'},
+  manga_noir:{label:'Manga noir',style:'Dense graphic ink, expressive faces, urban mystery, exaggerated silhouettes, hard graphic shadows with selective vivid color.',camera:'Extreme close-ups, low angles, rapid reframing, graphic diagonals.',lighting:'Hard side light, colored practicals, graphic shadow shapes.',film:'Ink texture with crisp cinematic color.'},
+  shonen_pop:{label:'Shonen pop',style:'Exaggerated action-comedy, elastic expressions, heroic poses, ridiculous props, energetic group staging, colorful graphic spectacle.',camera:'Fast push-ins, low-angle hero shots, whip pans, impact reframes.',lighting:'Bright high-key light with vivid colored accents.',film:'Clean animated-cinema texture, saturated color.'},
+  shojo_futuriste:{label:'Shojo futuriste',style:'Elegant futuristic fashion, ornate dreamlike interiors, sparkling mechanical details, expressive poses, surreal romantic geometry.',camera:'Graceful tracking, floating crane moves, symmetrical portraits, elegant close-ups.',lighting:'Soft luminous sources with vivid colored highlights.',film:'Polished cinematic image with graphic decorative detail.'},
+  cyberpunk_tokyo:{label:'Cyberpunk Tokyo',style:'Dense retrofuturist megacity, eccentric commuters, glowing vending machines, holographic clutter, absurd technology, saturated urban spectacle.',camera:'Street-level tracking, rapid reframing, wide crowd shots, macro gadget close-ups.',lighting:'Aggressive neon, colored reflections, luminous signage, wet surfaces.',film:'High-detail digital cinema with neon bloom.'},
+  french_bd_pop:{label:'BD française pop',style:'Graphic European comic aesthetic, clean contours, expressive caricature, architectural wit, flat-but-rich color blocks, absurd staging.',camera:'Strong diagonals, clean tableaux, punchy close-ups, lateral pans.',lighting:'Graphic directional light with bold colored shapes.',film:'Ink-and-paint texture with cinematic depth.'},
+  comic_retro:{label:'Comic rétrofuturiste',style:'Pulp comic spectacle, heroic caricatures, ray-gun gadgets, impossible machines, exaggerated poses, bright poster-like visual design.',camera:'Low-angle hero frames, dramatic zooms, dynamic diagonals, panel-like cuts.',lighting:'Graphic key light, saturated practical colors, bold rim light.',film:'Vintage print texture with saturated cinema color.'},
+  clay_satire:{label:'Satire de plateau',style:'Theatrical practical-set absurdism, oversized props, fake machinery, comic costumes, miniature architecture, deliberately artificial spectacle.',camera:'Static tableaux interrupted by comic push-ins and sudden pans.',lighting:'Bright theatrical studio lighting with colored pools.',film:'Tactile production texture, crisp cinematic photography.'},
+  documentary_color:{label:'Documentaire couleur halluciné',style:'Observational documentary framing but with impossible colorful events, eccentric costumes, surreal props treated as ordinary reality.',camera:'Reactive handheld, sudden zooms, imperfect reframing, observational close-ups.',lighting:'Available-looking light enhanced by vivid practical colors.',film:'Documentary texture, natural motion, rich color.'},
+  mockumentary_retro:{label:'Mockumentaire rétrofuturiste',style:'Dead-serious fake reportage, awkward public access television energy, bizarre futuristic bureaucracy, retro costumes, visual punchlines.',camera:'Shoulder camera, awkward zooms, interview-like starts, sudden wide reveals.',lighting:'Flat practical light mixed with outrageous colored sources.',film:'Analog broadcast texture with vivid chroma.'},
+  giallo_pop:{label:'Giallo pop',style:'Stylized mystery atmosphere, saturated colored lighting, baroque interiors, theatrical suspense, grotesque visual jokes, elegant silhouettes.',camera:'Slow tracking, extreme close-ups, sudden reveal cuts, graphic overheads.',lighting:'Strong colored gels, sharp highlights, dramatic shadows.',film:'Glossy cinematic texture with vivid color.'},
+  bollywood_futurist:{label:'Spectacle futuriste',style:'Grand theatrical staging, flamboyant costumes, geometric crowd choreography, extravagant futuristic sets, joyful visual excess; no musical performance required.',camera:'Sweeping crane shots, frontal tableaux, fast circular moves, celebratory wides.',lighting:'Brilliant saturated stage light and colored practicals.',film:'Glossy large-scale cinema texture.'},
+  sci_fi_pulp:{label:'Science-fiction pulp',style:'Retro science-fiction magazine aesthetic, chrome machines, ray-gun controls, bubble helmets, strange laboratories, comic seriousness.',camera:'Wide practical sets, gadget inserts, low-angle hero shots, quick reveals.',lighting:'Bright colored practicals, dramatic backlight, theatrical haze.',film:'Analog pulp texture with sharp saturated color.'},
+  space_opera_comedy:{label:'Space opera comique',style:'Huge cosmic architecture, ridiculous uniforms, theatrical commanders, impossible vehicles, majestic absurdity, dense futuristic set dressing.',camera:'Grand wides, orbital-feeling moves, fast reaction close-ups, dramatic reveals.',lighting:'Cosmic colored ambience, bright practical sources, strong rims.',film:'Epic cinematic clarity with rich chroma.'},
+  stopmotion_surreal:{label:'Stop-motion surréaliste',style:'Tactile handcrafted world, impossible proportions, oversized props, eccentric costumes, whimsical physics, deadpan comic acting.',camera:'Miniature-scale tracking, locked tableaux, abrupt comedic reframing.',lighting:'Theatrical practical light with vivid colored pools.',film:'Tactile texture and miniature depth cues, full color.'},
+  noir_neon:{label:'Noir néon',style:'Graphic noir silhouettes against saturated neon, rain-slick surfaces, strange retrofuturist costumes, serious faces in ridiculous situations.',camera:'Low angles, slow tracking, close-up inserts, reflective wides.',lighting:'Hard chiaroscuro combined with saturated neon color.',film:'Cinematic grain, deep blacks, luminous color.'},
+  vhs_future:{label:'VHS futuriste',style:'Analog-future television, chunky gadgets, bizarre retro computers, colorful costumes, deliberately strange consumer technology.',camera:'Zoom lenses, handheld broadcast framing, sudden push-ins, surveillance-like wides.',lighting:'Colored practicals, CRT glow, fluorescent mixtures.',film:'VHS-inspired texture, chromatic aberration, saturated color.'},
+  retro_documentary:{label:'Faux documentaire rétro',style:'Old television documentary grammar, futuristic 1960s design, deadpan witnesses, absurd public infrastructure, richly colored practical props.',camera:'Tripod interviews, slow pans, zooms, observational wides.',lighting:'Warm practical illumination with strong colored accents.',film:'16mm-inspired texture with vivid chroma.'}
+};
+
+const PALETTES = {
+  electric_coral_cyan:{label:'Corail électrique & Cyan',full:'dominant electric coral #FF4F79, luminous cyan #00F5FF, hot white highlights, saturated color everywhere, no grayscale, no muted tones'},
+  acid_lime_purple:{label:'Lime acide & Violet',full:'acid lime #B6FF00, ultraviolet purple #7A00FF, hot pink highlights, saturated full-color world, no grayscale'},
+  turquoise_orange:{label:'Turquoise & Orange solaire',full:'bright turquoise #00D9C0, solar orange #FF6A00, cream-white highlights, saturated full-color world, no grayscale'},
+  fuchsia_yellow:{label:'Fuchsia & Jaune laser',full:'laser yellow #FFF200, electric fuchsia #FF00A8, vivid blue micro-accents, saturated full-color world, no grayscale'},
+  cobalt_tangerine:{label:'Cobalt & Mandarine',full:'deep cobalt #1746FF, vivid tangerine #FF7A00, hot white highlights, saturated full-color world, no grayscale'},
+  emerald_pink:{label:'Émeraude & Rose fluo',full:'electric emerald #00D978, fluorescent pink #FF2DAA, warm white highlights, saturated full-color world, no grayscale'},
+  violet_lime:{label:'Violet ultraviolet & Lime',full:'ultraviolet violet #6A00FF, radioactive lime #A8FF00, cyan highlights, saturated full-color world, no grayscale'},
+  red_cyan:{label:'Rouge signal & Cyan',full:'signal red #FF1838, electric cyan #00E5FF, bright ivory highlights, saturated full-color world, no grayscale'},
+  gold_azure:{label:'Or électrique & Azur',full:'electric gold #FFD400, vivid azure #007BFF, hot magenta micro-accents, saturated full-color world, no grayscale'},
+  magenta_teal:{label:'Magenta & Turquoise',full:'hot magenta #FF1493, deep turquoise #00B8A9, bright yellow highlights, saturated full-color world, no grayscale'},
+  orange_purple:{label:'Orange mandarine & Prune',full:'mandarin orange #FF7800, rich plum #7B1FA2, electric cyan highlights, saturated full-color world, no grayscale'},
+  lime_pink:{label:'Citron vert & Rose bonbon',full:'acid lime #C6FF00, candy pink #FF4FB3, sky-blue highlights, saturated full-color world, no grayscale'},
+  ultraviolet_aqua:{label:'Ultraviolet & Aqua',full:'ultraviolet #7000FF, luminous aqua #00FFD5, yellow highlights, saturated full-color world, no grayscale'},
+  scarlet_turquoise:{label:'Écarlate & Turquoise',full:'scarlet #FF2400, bright turquoise #00D4C7, lemon highlights, saturated full-color world, no grayscale'},
+  royal_blue_lime:{label:'Bleu royal & Lime',full:'royal blue #245BFF, electric lime #B8FF00, hot pink highlights, saturated full-color world, no grayscale'},
+  copper_electric_blue:{label:'Cuivre & Bleu électrique',full:'bright copper #D66A3A, electric blue #005BFF, vivid cream highlights, saturated full-color world, no grayscale'}
+};
+
+/* ---------- Globals ---------- */
+let createImageIntervalMs = 4000;
+let imageAttemptsSinceLastError = 0;
+let debugCount = 0;
+let debugEntries = [];
+let debugCollapsed = false;
+
+const IMAGE_PARALLEL   = 3;
+const IMAGE_INTERVAL_MS = 3400;
+const IMAGE_INTERVAL_MIN = 3200;
+const IMAGE_INTERVAL_MAX = 12000;
+const TIMING_CACHE_KEY = 'newsreel_timing_v5';
+const API_KEY_STORAGE  = 'agnes_api_key';
+const WAKE_LOCK_PREF   = 'agnes_wakelock_enabled';
+const DEBUG_MAX_ENTRIES = 800;
+
+const state = {
+  newsItems: [], newsMethod: '',
+  segCount: 5,
+  durationSeconds: 5,                     // ← verrouillé 5 s pour le premier test
+  resolution: '720P', intensity: 'strong',
+  director: 'wes_anderson', palette: 'electric_coral_cyan',
+  isRunning: false, stopRequested: false,
+  jt: null, rawScenarioResponse: '',
+  hostImage: null, sceneImages: {},
+  videos: [], jtStartTime: 0,
+  bridgeReady: false,
+};
+
+/* ---------- Utils ---------- */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function formatEta(seconds){if(seconds<60)return Math.round(seconds)+'s';const m=Math.floor(seconds/60);const s=Math.round(seconds%60);return m+'m'+(s>0?' '+s+'s':'')}
+function countWords(str){if(!str)return 0;return String(str).trim().split(/\s+/).filter(Boolean).length}
+
+/* ---------- Debug ---------- */
+function debugLog(level,category,message,data){
+  const body=document.getElementById('debug-body');if(!body)return;
+  const time=new Date().toLocaleTimeString('fr-FR',{hour12:false});
+  const entry=document.createElement('div');entry.className='debug-entry '+level;
+  let html='<span class="debug-time">'+time+'</span>';
+  html+='<span class="debug-cat">['+esc(category)+']</span>';
+  html+='<span class="debug-msg">'+esc(message)+'</span>';
+  if(data!==undefined&&data!==null){
+    let dataStr;
+    if(typeof data==='string')dataStr=data;
+    else{try{dataStr=JSON.stringify(data,null,2)}catch(e){dataStr=String(data)}}
+    if(dataStr.length>3000)dataStr=dataStr.slice(0,3000)+'\n…[tronqué]';
+    html+='<pre class="debug-data">'+esc(dataStr)+'</pre>';
+  }
+  entry.innerHTML=html;body.appendChild(entry);
+  debugEntries.push({time,level,category,message});
+  if(debugEntries.length>DEBUG_MAX_ENTRIES)debugEntries.shift();
+  while(body.children.length>DEBUG_MAX_ENTRIES)body.removeChild(body.firstChild);
+  body.scrollTop=body.scrollHeight;
+  debugCount++;
+  const countEl=document.getElementById('debug-count');if(countEl)countEl.textContent=debugCount;
+}
+function clearDebug(){const b=document.getElementById('debug-body');if(b)b.innerHTML='';debugEntries=[];debugCount=0;const c=document.getElementById('debug-count');if(c)c.textContent='0';debugLog('info','SYSTEM','Console effacée')}
+function copyDebug(){const lines=debugEntries.map(e=>e.time+' ['+e.category+'] '+e.message).join('\n');const finish=(ok)=>showToast(ok?'Console copiée':'Copie impossible',ok?'success':'error');try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(lines).then(()=>finish(true)).catch(()=>legacyCopy(lines,finish));return}}catch(e){}legacyCopy(lines,finish)}
+function legacyCopy(text,cb){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='0';ta.style.left='0';ta.style.width='2em';ta.style.height='2em';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();ta.setSelectionRange(0,text.length);let ok=false;try{ok=document.execCommand('copy')}catch(e){ok=false}document.body.removeChild(ta);cb(ok)}
+function toggleDebugCollapse(){const p=document.getElementById('debug-panel');const b=document.getElementById('debug-collapse-btn');if(!p||!b)return;debugCollapsed=!debugCollapsed;p.classList.toggle('collapsed',debugCollapsed);b.textContent=debugCollapsed?'+':'−'}
+
+/* ---------- Toast ---------- */
+let toastTimeout=null;
+function showToast(message,type='success',duration=2500){
+  const toast=document.getElementById('toast');const icon=document.getElementById('toast-icon');const text=document.getElementById('toast-text');
+  if(!toast||!icon||!text)return;
+  toast.classList.remove('visible','success','error','warn');void toast.offsetWidth;
+  const icons={success:'✓',error:'✕',warn:'⚠'};icon.textContent=icons[type]||'✓';
+  text.textContent=message;toast.classList.add(type);
+  requestAnimationFrame(()=>toast.classList.add('visible'));
+  if(toastTimeout)clearTimeout(toastTimeout);
+  toastTimeout=setTimeout(()=>toast.classList.remove('visible'),duration);
+}
+
+/* ---------- Wake lock ---------- */
+let wakeLockSentinel=null;let wakeLockEnabled=false;let canvasStream=null;let canvasInterval=null;
+function isWakeLockSupported(){return'wakeLock'in navigator&&typeof navigator.wakeLock.request==='function'}
+async function requestWakeLockAPI(){if(!isWakeLockSupported())return false;try{wakeLockSentinel=await navigator.wakeLock.request('screen');wakeLockSentinel.addEventListener('release',()=>{wakeLockSentinel=null});return true}catch(e){return false}}
+async function releaseWakeLockAPI(){if(wakeLockSentinel){try{await wakeLockSentinel.release()}catch(e){}wakeLockSentinel=null}}
+function startCanvasStream(){if(canvasStream)return true;try{const canvas=document.getElementById('noSleepCanvas');const video=document.getElementById('noSleepVideo');if(!canvas||!video)return false;const ctx=canvas.getContext('2d');if(!ctx)return false;ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);if(typeof canvas.captureStream!=='function')return false;canvasStream=canvas.captureStream(1);let t=false;canvasInterval=setInterval(()=>{t=!t;ctx.fillStyle=t?'#000':'#010101';ctx.fillRect(0,0,canvas.width,canvas.height)},1000);video.srcObject=canvasStream;video.muted=true;video.playsInline=true;const p=video.play();if(p&&p.catch)p.catch(()=>{});return true}catch(e){return false}}
+function stopCanvasStream(){if(canvasInterval){clearInterval(canvasInterval);canvasInterval=null}const v=document.getElementById('noSleepVideo');if(v){try{v.pause();v.srcObject=null}catch(e){}}if(canvasStream){try{canvasStream.getTracks().forEach(t=>t.stop())}catch(e){}canvasStream=null}}
+async function activateWakeLock(){let s=false;if(isWakeLockSupported())s=await requestWakeLockAPI();if(!s)s=startCanvasStream();if(!s&&!canvasStream)s=startCanvasStream();return s}
+async function deactivateWakeLock(){await releaseWakeLockAPI();stopCanvasStream()}
+document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&wakeLockEnabled)await activateWakeLock()});
+async function ensureWakeLockActive(){if(!wakeLockEnabled)return;if(wakeLockSentinel===null&&canvasStream===null)await activateWakeLock()}
+
+/* ---------- Timing cache ---------- */
+function loadTimingCache(){try{return JSON.parse(localStorage.getItem(TIMING_CACHE_KEY)||'{}')}catch(e){return{}}}
+function saveTimingCache(c){try{localStorage.setItem(TIMING_CACHE_KEY,JSON.stringify(c))}catch(e){}}
+function estimateGenerationTime(key,fallbackMs){const c=loadTimingCache();const s=c[key];if(s&&s.length>0){const sorted=[...s].sort((a,b)=>a-b);const mid=Math.floor(sorted.length/2);return sorted.length%2===0?(sorted[mid-1]+sorted[mid])/2:sorted[mid]}return fallbackMs}
+function updateTimingDisplay(){
+  const s=document.getElementById('stat-speed');const t=document.getElementById('stat-samples');if(!s||!t)return;
+  if(state.bridgeReady){s.textContent='connecté';t.textContent='Modal prêt'}
+  else{s.textContent='non vérifié';t.textContent='—'}
+}
+
+/* ---------- API key ---------- */
+function getApiKey(){try{return(localStorage.getItem(API_KEY_STORAGE)||'').trim()}catch(e){return''}}
+function saveApiKey(){const input=document.getElementById('api-key-input');if(!input)return;const key=input.value.trim();if(!key){try{localStorage.removeItem(API_KEY_STORAGE)}catch(e){}updateApiPanel();showToast('Clé supprimée','warn');return}if(!key.startsWith('sk-')){if(!confirm('La clé ne commence pas par "sk-". Sauvegarder ?'))return}try{localStorage.setItem(API_KEY_STORAGE,key);updateApiPanel();showToast('Clé enregistrée ✓','success');debugLog('success','API','Clé : '+key.slice(0,8)+'…'+key.slice(-4));input.blur()}catch(e){showToast('Erreur sauvegarde','error')}}
+function updateApiPanel(){
+  const panel=document.getElementById('api-panel');const input=document.getElementById('api-key-input');
+  const statusLine=document.getElementById('api-status-line');const statusText=document.getElementById('api-status-text');
+  const key=getApiKey();if(!panel||!input||!statusLine||!statusText)return;
+  if(key){panel.classList.add('ok');statusLine.classList.add('ok');statusText.textContent='Clé active · '+key.slice(0,8)+'…'+key.slice(-4);input.value=key;input.placeholder=''}
+  else{panel.classList.remove('ok');statusLine.classList.remove('ok');statusText.textContent='Aucune clé API enregistrée';input.value='';input.placeholder='Collez votre clé API Agnes ici (sk-...)'}
+  updateJTButton();
+}
+function updateJTButton(){
+  const btn=document.getElementById('jt-btn');if(!btn)return;
+  const hasKey=!!getApiKey();btn.disabled=!hasKey||state.isRunning;
+  if(state.isRunning)btn.innerHTML='⏳ JT en cours…<span style="display:block;font-size:.65rem;letter-spacing:.15em;color:var(--dim);margin-top:.4rem;font-weight:400;text-transform:none;">Ne fermez pas l\'onglet</span>';
+  else if(!hasKey)btn.innerHTML='🔑 Ajoutez votre clé API<span style="display:block;font-size:.65rem;letter-spacing:.15em;color:var(--dim);margin-top:.4rem;font-weight:400;text-transform:none;">Pour lancer le JT</span>';
+  else btn.innerHTML='▶ Lancer le JT<span style="display:block;font-size:.65rem;letter-spacing:.15em;color:var(--dim);margin-top:.4rem;font-weight:400;text-transform:none;">'+state.segCount+' infos · '+(state.segCount*2)+' clips LTX · '+state.durationSeconds+'s · '+DIRECTORS[state.director].label+'</span>';
+}
+
+function renderNewsList(){const list=document.getElementById('news-list');if(!list)return;if(state.newsItems.length===0){list.innerHTML='<div style="padding:1.2rem;text-align:center;color:var(--faint);font-size:.8rem;">Aucune actualité chargée.</div>';return}list.innerHTML=state.newsItems.slice(0,15).map((item,i)=>'<div class="news-item"><span class="news-rank">'+item.rank+'.</span><div><div class="news-title">'+esc(item.title)+'</div><div class="news-source">'+esc(item.source||'')+'</div></div></div>').join('')}
+
+/* =============================================================================
+   RSS Google News — INCHANGÉ
+   ============================================================================= */
+async function fetchViaRss2Json(rssUrl){const apiKey=localStorage.getItem('rss2json_api_key')||'';const keyParam=apiKey?'&api_key='+encodeURIComponent(apiKey):'';const url='https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(rssUrl)+keyParam;debugLog('api','RSS2JSON','Requête : '+url.slice(0,120));const res=await fetch(url);if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(data.status!=='ok')throw new Error('rss2json status: '+data.status);return(data.items||[]).map((item,i)=>({title:item.title||'',link:item.link||'',pubDate:item.pubDate||'',source:item.author||'Google News',rank:i+1}))}
+async function fetchViaAllOrigins(rssUrl){const url='https://api.allorigins.win/raw?url='+encodeURIComponent(rssUrl);debugLog('api','ALLORIGINS','Requête…');const res=await fetch(url);if(!res.ok)throw new Error('HTTP '+res.status);return parseRssXml(await res.text())}
+async function fetchViaCodeTabs(rssUrl){const url='https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(rssUrl);debugLog('api','CODETABS','Requête…');const res=await fetch(url);if(!res.ok)throw new Error('HTTP '+res.status);return parseRssXml(await res.text())}
+async function fetchViaThingProxy(rssUrl){const url='https://thingproxy.freeboard.io/fetch/'+rssUrl;debugLog('api','THINGPROXY','Requête…');const res=await fetch(url);if(!res.ok)throw new Error('HTTP '+res.status);return parseRssXml(await res.text())}
+function parseRssXml(text){const parser=new DOMParser();const xmlDoc=parser.parseFromString(text,'text/xml');const items=xmlDoc.querySelectorAll('item');const newsItems=[];items.forEach((item,i)=>{if(i>=25)return;const title=item.querySelector('title')?.textContent||'';const link=item.querySelector('link')?.textContent||'';const pubDate=item.querySelector('pubDate')?.textContent||'';const source=item.querySelector('source')?.textContent||'';if(title)newsItems.push({title,link,pubDate,source,rank:i+1})});return newsItems}
+async function fetchGoogleNewsRSSWithFallback(category){const rssUrl=GOOGLE_NEWS_RSS[category]||GOOGLE_NEWS_RSS.WORLD;const methods=[{name:'rss2json',fn:()=>fetchViaRss2Json(rssUrl)},{name:'allorigins',fn:()=>fetchViaAllOrigins(rssUrl)},{name:'codetabs',fn:()=>fetchViaCodeTabs(rssUrl)},{name:'thingproxy',fn:()=>fetchViaThingProxy(rssUrl)}];for(const method of methods){try{debugLog('info','RSS','Tentative avec '+method.name+'…');const items=await method.fn();if(items&&items.length>0){debugLog('success','RSS',method.name+' → '+items.length+' actualités');return{items,method:method.name}}}catch(e){debugLog('warn','RSS',method.name+' échoué : '+e.message)}}debugLog('warn','RSS','Tous les proxys ont échoué — mode démo');return{items:getDemoNews(category),method:'demo'}}
+function getDemoNews(category){const demoData={WORLD:['Un sommet international se tient à Genève pour discuter du climat','Les Nations Unies appellent à un cessez-le-feu','Un nouveau traité commercial signé entre 12 pays','La crise humanitaire s\'aggrave dans la Corne de l\'Afrique','Un séisme de magnitude 7,2 frappe la côte pacifique'],NATION:['Le gouvernement annonce une réforme des retraites','Une grève nationale paralyse les transports','Le président inaugure un nouveau musée à Paris','Les élections municipales se préparent','Un scandale politique éclate au gouvernement'],BUSINESS:['La bourse de Paris atteint un niveau record','Une grande entreprise annonce 5 000 licenciements','L\'inflation ralentit pour le troisième mois','Une fusion majeure bouleverse le secteur bancaire','Le prix du pétrole chute de 8%'],TECHNOLOGY:['Une nouvelle IA bat tous les records','Un géant du numérique condamné','La 6G entre en phase de test','Une cyberattaque paralyse des hôpitaux','Un nouveau smartphone pliable révolutionne le marché'],SCIENCE:['Une découverte majeure sur l\'origine de l\'univers','Un vaccin contre le cancer entre en phase 3','La NASA annonce une mission vers Mars','Un nouveau dinosaure découvert en Patagonie','Un matériau supraconducteur à température ambiante'],HEALTH:['Une épidémie de grippe aviaire inquiète l\'OMS','Un traitement contre Alzheimer approuvé','La pollution réduit l\'espérance de vie','Un nouveau variant du Covid détecté','La téléconsultation explose'],SPORTS:['La France remporte la Coupe du monde de rugby','Un marathonien bat le record du monde','Les JO de 2036 attribués','Un scandale de dopage secoue le cyclisme','Le PSG signe un contrat record'],ENTERTAINMENT:['Un film français remporte la Palme d\'Or','Une série phénomène bat des records','Un festival attire 500 000 personnes','Un acteur légendaire annonce sa retraite','Un album surprise bat tous les records']};const titles=demoData[category]||demoData.WORLD;return titles.map((title,i)=>({title,link:'#',pubDate:new Date().toISOString(),source:'Mode démo',rank:i+1}))}
+
+/* =============================================================================
+   apiFetch (Agnes texte + image)
+   ============================================================================= */
+async function apiFetch(url,options={},label='API',kind='default'){
+  const maxAttempts=kind==='image'?10:8;
+  for(let attempt=0;attempt<maxAttempts;attempt++){
+    if(state.stopRequested)throw new Error('Arrêt demandé');
+    const method=options.method||'GET';
+    let bodyPreview=null;
+    if(options.body){try{const p=JSON.parse(options.body);const c=JSON.parse(JSON.stringify(p));if(c.image&&typeof c.image==='string'&&c.image.length>80)c.image=c.image.slice(0,80)+'…[b64 '+c.image.length+']';bodyPreview=c}catch(e){bodyPreview=String(options.body).slice(0,500)}}
+    debugLog('api','REQ '+label,method+' '+url+' (tentative '+(attempt+1)+'/'+maxAttempts+')',bodyPreview);
+    try{
+      const t0=Date.now();const res=await fetch(url,options);const dt=Date.now()-t0;
+      let retryAfter=0;try{retryAfter=parseInt(res.headers.get('Retry-After')||'0',10)||0}catch(e){}
+      let errorText='';
+      if(!res.ok&&[400,401,404,429,500,502,503,504,520].includes(res.status)){try{errorText=(await res.clone().text()).slice(0,1200)}catch(e){}}
+      debugLog('response','RÉP '+label,'HTTP '+res.status+' en '+dt+'ms',errorText||undefined);
+      if(res.ok){
+        if(kind==='image'){imageAttemptsSinceLastError++;if(imageAttemptsSinceLastError>=4&&createImageIntervalMs>IMAGE_INTERVAL_MIN){createImageIntervalMs=Math.max(IMAGE_INTERVAL_MIN,createImageIntervalMs-250);imageAttemptsSinceLastError=0}}
+        return res;
+      }
+      if([400,401,404].includes(res.status))throw new Error('HTTP '+res.status+' — '+errorText.slice(0,300));
+      if(res.status===429){const wait=retryAfter>0?retryAfter:Math.min(120,10+attempt*12);if(kind==='image')createImageIntervalMs=Math.min(IMAGE_INTERVAL_MAX,createImageIntervalMs+1000);debugLog('warn','RATELIMIT','429 — attente '+wait+'s');setStatus('Limite API — nouvelle tentative dans '+wait+'s');await sleep(wait*1000);continue}
+      if([500,502,503,504,520].includes(res.status)){const wait=Math.min(60,5+attempt*5);debugLog('warn','SERVICE','HTTP '+res.status+' — attente '+wait+'s');setStatus('Service occupé — nouvelle tentative dans '+wait+'s');await sleep(wait*1000);continue}
+      return res;
+    }catch(e){
+      if(e.message==='Arrêt demandé')throw e;
+      const wait=Math.min(45,3+attempt*4);
+      debugLog('warn','NETWORK',e.message+' — retry dans '+wait+'s');
+      setStatus('Connexion instable — reprise dans '+wait+'s');
+      await sleep(wait*1000);
+    }
+  }
+  throw new Error('Tentatives épuisées pour '+label+' après '+maxAttempts+' essais');
+}
+
+async function retryTask(name,fn,maxAttempts=3){let lastError=null;for(let i=1;i<=maxAttempts;i++){if(state.stopRequested)throw new Error('Arrêt demandé');try{debugLog('info','RETRY',name+' — essai '+i+'/'+maxAttempts);return await fn()}catch(e){lastError=e;if(e.message==='Arrêt demandé')throw e;debugLog('warn','RETRY',name+' échoué : '+e.message);if(i<maxAttempts){const wait=Math.min(90,8*i*i);setStatus(name+' — reprise automatique dans '+wait+'s');await sleep(wait*1000)}}}throw lastError||new Error(name+' échoué')}
+
+async function generateImage(prompt){
+  return retryTask('Image',async()=>{
+    const body={model:MODEL_IMAGE,prompt:prompt,size:'1K',ratio:'9:16',n:1};
+    const res=await apiFetch(API_BASE+'/images/generations',{method:'POST',headers:{'Authorization':'Bearer '+getApiKey(),'Content-Type':'application/json'},body:JSON.stringify(body)},'Image','image');
+    if(!res.ok){const err=await res.text();throw new Error('HTTP '+res.status+' — '+err.slice(0,500))}
+    const data=await res.json();const item=data.data&&data.data[0];
+    if(!item)throw new Error('Pas de donnée image');
+    if(item.url)return item.url;
+    if(item.b64_json)return'data:image/png;base64,'+item.b64_json;
+    throw new Error('Format image inconnu');
+  },4);
+}
+
+/* =============================================================================
+   JSON parsing scénario — INCHANGÉ
+   ============================================================================= */
+function escapeControlCharsInStrings(text){let result='';let inString=false;let escape=false;for(let i=0;i<text.length;i++){const ch=text[i];if(escape){result+=ch;escape=false;continue}if(ch==='\\'){result+=ch;escape=true;continue}if(ch==='"'){inString=!inString;result+=ch;continue}if(inString){if(ch==='\n'){result+='\\n';continue}if(ch==='\r'){result+='\\r';continue}if(ch==='\t'){result+='\\t';continue}const code=ch.charCodeAt(0);if(code<32){result+='\\u'+code.toString(16).padStart(4,'0');continue}}result+=ch}return result}
+function balanceJson(text){let ob=0,ok=0,inS=false,esc=false;for(let i=0;i<text.length;i++){const ch=text[i];if(esc){esc=false;continue}if(ch==='\\'){esc=true;continue}if(ch==='"'){inS=!inS;continue}if(inS)continue;if(ch==='{')ob++;else if(ch==='}')ob--;else if(ch==='[')ok++;else if(ch===']')ok--}let r=text;if(inS)r+='"';while(ok>0){r+=']';ok--}while(ob>0){r+='}';ob--}return r}
+function salvageScenario(text){const t=text.match(/"jt_title"\s*:\s*"((?:[^"\\]|\\.)*)"/)||text.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/);const h=text.match(/"host"\s*:\s*\{[\s\S]*?"name"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"description"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"plateau"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"host_action"\s*:\s*"((?:[^"\\]|\\.)*)"/);const host=h?{name:h[1],description:h[2],plateau:h[3],host_action:h[4]}:null;const segments=[];const re=/"segment_number"\s*:\s*(\d+)[\s\S]*?"headline"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"summary"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"host_dialogue"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"host_action"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"people"\s*:\s*\[([\s\S]*?)\]\s*,[\s\S]*?"location"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"scene_action"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"camera_plan"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"reporter"\s*:\s*\{[\s\S]*?"name"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"description"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"dialogue"\s*:\s*"((?:[^"\\]|\\.)*)"/g;let m;while((m=re.exec(text))!==null){const pb=m[6];const people=[];const pre=/\{[^{}]*?"name"\s*:\s*"((?:[^"\\]|\\.)*)"[^{}]*?"description"\s*:\s*"((?:[^"\\]|\\.)*)"[^{}]*?"role"\s*:\s*"((?:[^"\\]|\\.)*)"[^{}]*?\}/g;let pm;while((pm=pre.exec(pb))!==null){people.push({name:pm[1],description:pm[2],role:pm[3]})}segments.push({segment_number:parseInt(m[1],10),headline:m[2].replace(/\\n/g,' ').replace(/\\"/g,'"'),summary:m[3].replace(/\\n/g,' ').replace(/\\"/g,'"'),host_dialogue:m[4].replace(/\\n/g,' ').replace(/\\"/g,'"'),host_action:m[5].replace(/\\n/g,' ').replace(/\\"/g,'"'),people:people,location:m[7].replace(/\\n/g,' ').replace(/\\"/g,'"'),scene_action:m[8].replace(/\\n/g,' ').replace(/\\"/g,'"'),camera_plan:m[9].replace(/\\n/g,' ').replace(/\\"/g,'"'),reporter:{name:m[10].replace(/\\"/g,'"'),description:m[11].replace(/\\n/g,' ').replace(/\\"/g,'"'),dialogue:m[12].replace(/\\n/g,' ').replace(/\\"/g,'"')},emotion:'spectaculaire'})}if(segments.length===0)return null;return{jt_title:t?t[1]:'Le JT de NewsReel',host,segments}}
+function extractJson(text){if(!text)return null;let c=text.trim();const fm=c.match(/```(?:json)?\s*([\s\S]*?)```/);if(fm)c=fm[1].trim();const fb=c.indexOf('{');if(fb<0)return null;c=c.slice(fb);try{return JSON.parse(c)}catch(e1){}try{return JSON.parse(escapeControlCharsInStrings(c))}catch(e2){}try{const lb=c.lastIndexOf('}');if(lb>0)return JSON.parse(escapeControlCharsInStrings(c.slice(0,lb+1)))}catch(e3){}try{return JSON.parse(balanceJson(escapeControlCharsInStrings(c)))}catch(e4){}try{const s=salvageScenario(c);if(s&&s.segments&&s.segments.length>0)return s}catch(e5){}return null}
+
+/* =============================================================================
+   Prompt scénario — INCHANGÉ
+   ============================================================================= */
+function buildJTScenarioPrompt(newsItems,segCount,director,palette){
+  const newsList=newsItems.slice(0,20).map((n,i)=>(i+1)+'. '+n.title).join('\n');
+  const d=DIRECTORS[director];const p=PALETTES[palette];
+  return [
+    'You are the head writer of a short-form satirical TV news show based on TODAY\'S NEWS.','',
+    'CORE FORMAT — EVERY SEGMENT IS A COMPLETE COMEDIC SKETCH:',
+    '- The HOST on the TV studio explains the actual news clearly and briefly.',
+    '- The FIELD REPORTER MUST NOT repeat, paraphrase, restate, summarize, or give the same information as the host.',
+    '- The field reporter says ONE original funny sentence inspired by the news AND by the absurd physical situation happening around them.',
+    '- The reporter sentence is a punchline, observation, ironic reaction, deadpan joke, or comic metaphor. It must make sense only because of the scene.',
+    '- Host and reporter dialogue must be clearly different in content and purpose.',
+    '- The visual action must create a comic situation that gives the reporter a reason to say the joke.',
+    '- Each clip must feel like a self-contained sketch with setup → escalation → visual gag → punchline.','',
+    'NEWS LIST (Google News, today):',newsList,'',
+    'ABSOLUTE FACT RULE:',
+    '- headline: copy the EXACT selected news title verbatim.',
+    '- summary: only facts supported by the supplied title/news context. Never invent numbers, names, dates or events.',
+    '- host_dialogue: factual TV-news statement based on the summary, 8-16 French words.',
+    '- reporter.dialogue: NOT factual repetition. Exactly one funny French sentence, 8-18 words, reacting to the physical gag.','',
+    'COMEDIC CONSTRUCTION FOR EVERY SEGMENT:',
+    '- Give the reporter a concrete comic problem caused by the news-related situation.',
+    '- Make 3-5 secondary characters actively worsen the situation in a visually readable way.',
+    '- The gag must be physical, safe, surreal and immediately understandable without subtitles.',
+    '- The reporter remains committed as if this were serious journalism.',
+    '- The joke must be different for every segment.',
+    '- Avoid generic jokes such as "cest le chaos", "je ne sais plus quoi dire", "on est en direct" or simple repetition of the headline.','',
+    'VISUAL WORLD — MANDATORY FOR ALL CHARACTERS AND SETS:',
+    '- Every human character wears a clearly retrofuturistic, funny, extravagant costume appropriate to their role: oversized collars, strange helmets, chrome accessories, absurd pockets, geometric shoulder pieces, unusual glasses, inflatable details, retro sci-fi fabrics or ridiculous functional gadgets.',
+    '- No ordinary modern clothing unless transformed into a comic retrofuturist version.',
+    '- Every location is visually hallucinatory: impossible architecture, oversized props, surreal machines, strange signage without readable text, bizarre furniture, giant objects related to the news, unusual scale relationships.',
+    '- Images must be richly colored and visually exuberant. NEVER default to grey, desaturated, monochrome, beige or bland realism.',
+    '- The selected palette below is the ONLY color-direction source. Do not invent another palette.','',
+    'STANISLAVSKI:','- Every character has objective, obstacle, given_circumstances and physical_action.','- Performances are committed and serious even when the situation is ridiculous.','',
+    'DIRECTOR / VISUAL GRAMMAR — '+d.label.toUpperCase()+':',d.style,'Camera: '+d.camera,'Lighting: '+d.lighting,'Film: '+d.film,'',
+    'COLOR PALETTE — '+p.label.toUpperCase()+':',p.full,'Use this exact chromatic family throughout the image. No grayscale fallback.','',
+    'SOUND:','- No music or soundtrack.','- Only diegetic foley and environmental sound plus birds in every shot.','',
+    'OUTPUT JSON — ONLY JSON, no markdown:','{',
+    '  "jt_title": "Le JT de NewsReel — [theme]",',
+    '  "host": {"name":"...","description":"detailed retrofuturistic funny outfit","plateau":"hallucinatory retrofuturistic TV set","host_action":"recurring visual gag that supports each news item","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},',
+    '  "segments": [','    {','      "segment_number": 1,',
+    '      "headline": "EXACT selected headline",',
+    '      "summary": "supported factual summary",',
+    '      "host_dialogue": "8-16 French words stating the actual news",',
+    '      "host_action": "specific visual studio gag tied to this news",',
+    '      "people": [',
+    '        {"name":"...","description":"retro-futuristic funny costume + physical traits","role":"news-related role","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},',
+    '        {"name":"...","description":"...","role":"...","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},',
+    '        {"name":"...","description":"...","role":"...","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}}',
+    '      ],',
+    '      "location": "hallucinatory retrofuturistic location tied to the news",',
+    '      "scene_action": "continuous visual sketch: setup, escalation, absurd gag, reporter predicament, punchline moment",',
+    '      "camera_plan": "short-form sketch coverage: establishing shot, reaction close-up, physical gag, punchline close-up, final wide",',
+    '      "reporter": {"name":"...","description":"retro-futuristic funny outfit","dialogue":"8-18 French words: ONE original joke about the scene, NOT the news facts"},',
+    '      "emotion": "one word"','    }','  ]','}',
+    'Exactly '+segCount+' segments. Every segment is a distinct sketch. Do not repeat reporter joke structures.'
+  ].join('\n');
+}
+
+async function generateJTScenario(newsItems,segCount,director,palette){
+  setPhase('text','🧠 Analyse des actualités…','');
+  setStatus('L\'IA analyse les titres du jour…');
+
+  const prompt=buildJTScenarioPrompt(newsItems,segCount,director,palette);
+  debugLog('ai','PROMPT JT','Prompt envoyé',prompt.slice(0,2500));
+
+  const body={
+    model:MODEL_TEXT,
+    messages:[
+      {
+        role:'system',
+        content:'You are a TV news producer and visual director. You ALWAYS return valid JSON exactly matching the requested schema. All string values are on single lines. No markdown, no commentary. You create news programs with SPECTACULAR HOOK ACTIONS and MULTIPLE CHARACTERS tied to the news. Every segment includes 3-5 secondary characters whose role matches the news topic. ACTING MUST BE STANISLAVSKI METHOD. Every segment is a self-contained sketch. The host gives facts; the reporter gives a new scene-dependent joke and NEVER repeats the host. All people and sets are funny retrofuturist and highly colorful. No music; foley and birds only. Return strict JSON.'
+      },
+      {role:'user',content:prompt}
+    ],
+    temperature:0.9,
+    max_tokens:9000,
+    response_format:{type:'json_object'}
+  };
+
+  const res=await apiFetch(
+    API_BASE+'/chat/completions',
+    {
+      method:'POST',
+      headers:{
+        'Authorization':'Bearer '+getApiKey(),
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify(body)
+    },
+    'Scénario JT',
+    'text'
+  );
+
+  if(!res.ok){
+    const err=await res.text();
+    debugLog('error','JT','HTTP '+res.status,err.slice(0,2000));
+    throw new Error('HTTP '+res.status);
+  }
+
+  const data=await res.json();
+  debugLog('response','RAW JT','Réponse brute',data);
+
+  const content=data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content;
+  state.rawScenarioResponse=content||'';
+
+  const rawEl=document.getElementById('raw-scenario');
+  if(rawEl)rawEl.textContent=content||'(vide)';
+
+  const jt=extractJson(content);
+  if(!jt||!Array.isArray(jt.segments)||jt.segments.length===0){
+    throw new Error('Scénario JT invalide');
+  }
+
+  /* ---------- Host : normalisation défensive ---------- */
+  if(!jt.host||typeof jt.host!=='object'||Array.isArray(jt.host))jt.host={};
+  if(typeof jt.host.name!=='string'||!jt.host.name.trim())jt.host.name='Chroniqueur';
+  if(typeof jt.host.description!=='string'||!jt.host.description.trim())jt.host.description='silver-haired anchor, grey suit, oversized round glasses';
+  if(typeof jt.host.plateau!=='string'||!jt.host.plateau.trim())jt.host.plateau='TV studio, symmetrical, chrome desk, giant circular portholes';
+  if(typeof jt.host.host_action!=='string'||!jt.host.host_action.trim())jt.host.host_action='the host turns a giant chrome crank and the studio walls split open to reveal a cityscape while paper birds fly out';
+  if(!jt.host.stanislavski||typeof jt.host.stanislavski!=='object'||Array.isArray(jt.host.stanislavski)){
+    jt.host.stanislavski={
+      objective:'to deliver the news with authority',
+      obstacle:'the studio is falling apart around him',
+      given_circumstances:'He has been anchoring for 20 years and is exhausted',
+      physical_action:'presses button with deliberate slowness'
+    };
+  }
+
+  /* ---------- Segments : retirer les entrées inutilisables ---------- */
+  jt.segments=jt.segments.filter(s=>s&&typeof s==='object'&&!Array.isArray(s));
+  if(jt.segments.length===0)throw new Error('Scénario JT sans segment exploitable');
+
+  if(jt.segments.length<segCount){
+    const last=jt.segments[jt.segments.length-1];
+    while(jt.segments.length<segCount){
+      const clone=JSON.parse(JSON.stringify(last));
+      clone.segment_number=jt.segments.length+1;
+      jt.segments.push(clone);
+    }
+  }
+  if(jt.segments.length>segCount)jt.segments=jt.segments.slice(0,segCount);
+
+  const createFallbackPeople=()=>[
+    {
+      name:'Figurant 1',
+      description:'outfit matching the news, playful expression',
+      role:'witness',
+      stanislavski:{
+        objective:'to be seen',
+        obstacle:'anonymity',
+        given_circumstances:'ordinary person caught in extraordinary events',
+        physical_action:'waves nervously'
+      }
+    },
+    {
+      name:'Figurant 2',
+      description:'outfit matching the news, playful expression',
+      role:'witness',
+      stanislavski:{
+        objective:'to understand',
+        obstacle:'chaos',
+        given_circumstances:'confused by the situation',
+        physical_action:'shrugs dramatically'
+      }
+    },
+    {
+      name:'Figurant 3',
+      description:'outfit matching the news, playful expression',
+      role:'witness',
+      stanislavski:{
+        objective:'to help',
+        obstacle:'helplessness',
+        given_circumstances:'wants to make a difference',
+        physical_action:'reaches out'
+      }
+    }
+  ];
+
+  jt.segments.forEach((s,i)=>{
+    s.segment_number=i+1;
+    if(typeof s.headline!=='string'||!s.headline.trim())s.headline='Actualité du jour';
+    if(typeof s.summary!=='string'||!s.summary.trim())s.summary=s.headline;
+    if(typeof s.emotion!=='string'||!s.emotion.trim())s.emotion='spectaculaire';
+    if(typeof s.host_dialogue!=='string')s.host_dialogue='';
+    if(typeof s.host_action!=='string'||!s.host_action.trim())s.host_action=jt.host.host_action;
+    if(typeof s.scene_action!=='string'||!s.scene_action.trim())s.scene_action='the reporter and the people on set perform an incredible synchronized choreography while smoke fills the frame';
+    if(typeof s.camera_plan!=='string'||!s.camera_plan.trim())s.camera_plan='Opening wide shot, then cuts to close-ups, shot-reverse-shot between reporter and people, ending on a wide symmetrical frame.';
+    if(typeof s.location!=='string'||!s.location.trim())s.location='location, symmetrical, chrome arches, concrete textures';
+
+    /* Reporter : toujours créer un objet valide AVANT tout accès à .dialogue */
+    if(!s.reporter||typeof s.reporter!=='object'||Array.isArray(s.reporter)){
+      debugLog('warn','JT_REPAIR','Reporter manquant/invalide sur segment '+(i+1)+' — fallback appliqué');
+      s.reporter={};
+    }
+    const reporter=s.reporter;
+    if(typeof reporter.name!=='string'||!reporter.name.trim())reporter.name='Reporter';
+    if(typeof reporter.description!=='string'||!reporter.description.trim())reporter.description='grey trench coat, black umbrella, round glasses';
+    if(typeof reporter.dialogue!=='string')reporter.dialogue='';
+    if(!reporter.stanislavski||typeof reporter.stanislavski!=='object'||Array.isArray(reporter.stanislavski)){
+      reporter.stanislavski={
+        objective:'to finish the live report professionally',
+        obstacle:'the absurd situation around the reporter',
+        given_circumstances:'live on television with no possibility of stopping',
+        physical_action:'tries to remain composed while reacting physically to the chaos'
+      };
+    }
+
+    /* Figurants */
+    if(!Array.isArray(s.people))s.people=[];
+    s.people=s.people.filter(p=>p&&typeof p==='object'&&!Array.isArray(p));
+    if(s.people.length===0)s.people=createFallbackPeople();
+    s.people=s.people.map((p,index)=>{
+      if(typeof p.name!=='string'||!p.name.trim())p.name='Figurant '+(index+1);
+      if(typeof p.role!=='string'||!p.role.trim())p.role='witness';
+      if(typeof p.description!=='string'||!p.description.trim())p.description='news-related retro-futuristic funny costume';
+      if(!p.stanislavski||typeof p.stanislavski!=='object'||Array.isArray(p.stanislavski)){
+        p.stanislavski={
+          objective:'to react naturally to the event',
+          obstacle:'the absurd situation',
+          given_circumstances:'caught unexpectedly in a live television report',
+          physical_action:'reacts physically to what happens around them'
+        };
+      }
+      return p;
+    });
+
+    /* Dialogue host */
+    let hw=countWords(s.host_dialogue);
+    if(hw>18){
+      s.host_dialogue=s.host_dialogue.trim().split(/\s+/).slice(0,16).join(' ');
+      hw=countWords(s.host_dialogue);
+    }
+    if(hw>0&&hw<6)s.host_dialogue+=' aujourd\'hui.';
+
+    /* Dialogue reporter */
+    let rw=countWords(reporter.dialogue);
+    if(rw>22){
+      reporter.dialogue=reporter.dialogue.trim().split(/\s+/).slice(0,18).join(' ');
+      rw=countWords(reporter.dialogue);
+    }
+    if(rw>0&&rw<8)reporter.dialogue+=' — voilà le problème.';
+    if(!reporter.dialogue||reporter.dialogue===s.host_dialogue){
+      reporter.dialogue='Même ma machine à café aurait demandé une mutation.';
+    }
+
+    /* Style */
+    const retro='retro-futuristic funny costume with oversized geometric details, chrome accessories, absurd gadget';
+    if(!/retro|futur/i.test(reporter.description))reporter.description+='; '+retro;
+    if(!/hallucin/i.test(s.location))s.location+='; hallucinatory retrofuturist architecture, oversized news-related props, impossible scale';
+    s.people.forEach(p=>{
+      if(typeof p.description!=='string'||!p.description.trim())p.description='news-related '+retro;
+      if(!/retro|futur/i.test(p.description))p.description+='; '+retro;
+    });
+  });
+
+  debugLog('success','JT',jt.segments.length+' segments créés');
+  return jt;
+}
+
+/* =============================================================================
+   Prompts image — INCHANGÉS
+   ============================================================================= */
+function buildImageStyleBlock(director,palette){const d=DIRECTORS[director];const p=PALETTES[palette];return[
+  'VISUAL STYLE: '+d.style,'CAMERA LANGUAGE: '+d.camera,'LIGHTING: '+d.lighting,'IMAGE TEXTURE: '+d.film,
+  'COLOR RULE — ONLY THIS PALETTE: '+p.full,
+  'MANDATORY COLOR SATURATION: strong chromatic presence across costumes, architecture, props, lighting and background. Never grey, never monochrome, never desaturated, never bland beige.',
+  'MANDATORY CHARACTER DESIGN: every person wears a funny retrofuturistic costume with exaggerated silhouettes, chrome/plastic accessories, unusual glasses, helmets, geometric panels, absurd gadgets and period-future details.',
+  'MANDATORY SET DESIGN: hallucinatory retrofuturist environment, impossible architecture, oversized props related to the news, strange machines, surreal scale, visually dense but readable.',
+  'Photographic/cinematic image according to the selected visual style. No generic modern studio look.',
+  'NO readable text, NO watermark, NO logos.'
+].join('\n')}
+
+function buildHostImagePrompt(host,director,palette){return[
+  'KEYFRAME FOR A COMEDIC TV NEWS SKETCH.',
+  'HOST: '+host.name+' — '+host.description,
+  'SET: '+host.plateau,
+  buildImageStyleBlock(director,palette),
+  'The host is the factual anchor of the sketch, composed and deadpan, while a visually absurd retrofuturist mechanism related to the current news is already malfunctioning around the desk.',
+  'Create a strong instantly readable vertical composition with exaggerated props and costume details.',
+  'Portrait 9:16, rich saturated color, cinematic visual impact.'
+].join('\n')}
+
+function buildReporterImagePrompt(seg,director,palette){const r=seg.reporter;const peopleList=(seg.people||[]).map(p=>p.name+' ('+p.role+'): '+p.description).join(' | ');return[
+  'KEYFRAME FOR A SELF-CONTAINED COMEDIC FIELD-REPORT SKETCH.',
+  'REPORTER: '+r.name+' — '+r.description,
+  'SECONDARY CHARACTERS: '+peopleList,
+  'LOCATION: '+seg.location,
+  'SCENE ACTION: '+seg.scene_action,
+  buildImageStyleBlock(director,palette),
+  'Compose the exact visual setup of a sketch: the reporter is visibly trapped in or struggling with the news-related gag while every secondary character actively contributes to the escalating situation.',
+  'All characters are visible enough to read their funny retrofuturist costumes and roles.',
+  'Portrait 9:16, extremely colorful, visually surprising, cinematic and immediately understandable.'
+].join('\n')}
+
+/* =============================================================================
+   Prompts vidéo — RÉUTILISÉS TELS QUELS
+   ============================================================================= */
+function buildHostVideoPrompt(jt,seg,index,director,palette){const d=DIRECTORS[director];const p=PALETTES[palette];const line=(seg.host_dialogue||'').replace(/"/g,'\"');const action=seg.host_action||jt.host.host_action||'';const stani=seg.stanislavski||jt.host.stanislavski||{};return[
+  'COMEDIC TV NEWS SKETCH — '+state.durationSeconds+' seconds.',
+  'The host delivers the actual news fact while the studio performs a visual joke around them.',
+  d.label.toUpperCase()+'.',
+  'HOST: '+jt.host.name+' — '+jt.host.description,
+  'STANISLAVSKI: objective '+(stani.objective||'deliver the news')+'; obstacle '+(stani.obstacle||'the absurd studio'),
+  'RETROFUTURIST STUDIO: '+jt.host.plateau,
+  'VISUAL GAG: '+action,
+  'The host must remain the factual narrator; do not turn the host dialogue into a joke that changes the news.',
+  'COMEDIC STRUCTURE: immediate visual setup, escalating malfunction, host remains serious, final visual punchline.',
+  'CAMERA: '+d.camera,'STYLE: '+d.style,'LIGHTING: '+d.lighting,'FILM: '+d.film,
+  'PALETTE: '+p.full,
+  'SATURATION: maximum rich color; absolutely no grey/desaturated fallback.',
+  'SOUND: no music. Only diegetic foley, mechanical noises, reactions, and birds.',
+  'AUDIO — host speaks exactly this French factual line: "'+line+'"',
+  'No subtitles, no readable text, no watermark, no logo.'
+].join('\n')}
+
+function buildReporterVideoPrompt(jt,seg,index,director,palette){const d=DIRECTORS[director];const p=PALETTES[palette];const r=seg.reporter;const line=(r.dialogue||'').replace(/"/g,'\"');const action=seg.scene_action||'';const peopleDesc=(seg.people||[]).map(p=>p.name+' ('+p.role+') — '+p.description).join(' || ');const cameraPlan=seg.camera_plan||'establishing shot, reaction close-up, physical gag, punchline close-up, final wide';return[
+  'COMPLETE COMEDIC FIELD-REPORT SKETCH — '+state.durationSeconds+' seconds.',
+  d.label.toUpperCase()+'.',
+  'REPORTER: '+r.name+' — '+r.description,
+  'RETROFUTURIST CAST: '+peopleDesc,
+  'LOCATION: '+seg.location,
+  'FULL VISUAL GAG: '+action,
+  'All characters are active. The reporter has a concrete comic problem caused by the news-related situation.',
+  'COMEDIC STRUCTURE: 1) establish the bizarre situation; 2) escalate physically; 3) reporter tries to maintain journalistic seriousness; 4) the gag peaks; 5) reporter delivers the punchline while the visual chaos continues.',
+  'CRITICAL DIALOGUE RULE: the reporter MUST NOT repeat the host, headline, summary, numbers, names, dates or factual explanation. The reporter says only this scene-dependent joke: "'+line+'"',
+  'CAMERA: '+cameraPlan+'; '+d.camera,
+  'STYLE: '+d.style,'LIGHTING: '+d.lighting,'FILM: '+d.film,
+  'PALETTE: '+p.full,
+  'SATURATION: maximum rich color on every frame; never grey, monochrome, desaturated or bland.',
+  'SOUND: no music. Only diegetic foley, physical comedy sounds, environmental ambience and birds.',
+  'LIP SYNC: reporter speaks the exact joke naturally in French at the punchline moment.',
+  'No subtitles, no readable text, no watermark, no logo.'
+].join('\n')}
+
+/* =============================================================================
+   Queue rate-limitée (images uniquement)
+   ============================================================================= */
+function createRateLimitedQueue(maxConcurrent,minIntervalMs){let running=0;let lastStart=0;const queue=[];let resolveIdle=null;function tryNext(){if(running>=maxConcurrent)return;if(queue.length===0){if(running===0&&resolveIdle){resolveIdle();resolveIdle=null}return}const now=Date.now();const wait=Math.max(0,lastStart+minIntervalMs-now);if(wait>0){setTimeout(tryNext,wait);return}const task=queue.shift();running++;lastStart=Date.now();task().finally(()=>{running--;setTimeout(tryNext,0)})}return{add(fn){return new Promise((resolve,reject)=>{queue.push(()=>fn().then(resolve,reject));setTimeout(tryNext,0)})},idle(){return new Promise(r=>{if(running===0&&queue.length===0)return r();resolveIdle=r})}}}
+
+/* =============================================================================
+   UI
+   ============================================================================= */
+function setStatus(text){const bar=document.getElementById('status-bar');const txt=document.getElementById('status-text');if(!bar||!txt)return;if(text){bar.classList.add('visible');txt.textContent=text}else bar.classList.remove('visible')}
+function setPhase(phase,detail,eta){const bar=document.getElementById('phase-bar');if(bar)bar.classList.add('visible');document.querySelectorAll('.phase-step').forEach(el=>{el.classList.remove('active','done');const order=['text','dialogue','images','videos','done'];const curIdx=order.indexOf(phase);const elIdx=order.indexOf(el.dataset.phase);if(elIdx<curIdx)el.classList.add('done');else if(elIdx===curIdx)el.classList.add('active')});const d=document.getElementById('phase-detail');const e=document.getElementById('phase-eta');if(d)d.innerHTML=detail||'';if(e)e.textContent=eta||''}
+
+function renderJT(){const panel=document.getElementById('jt-panel');const card=document.getElementById('jt-card');if(!panel||!card||!state.jt)return;const jt=state.jt;let html='';html+='<div class="jt-title">'+esc(jt.jt_title||'Le JT de NewsReel')+'</div>';html+='<div class="jt-meta">'+jt.segments.length+' sujets · '+DIRECTORS[state.director].label+' · '+PALETTES[state.palette].label+'</div>';html+='<div style="text-align:center;margin-bottom:1rem;"><span class="host-tag">🎙️ <strong>'+esc(jt.host.name)+'</strong> — '+esc((jt.host.description||'').slice(0,90))+'</span></div>';jt.segments.forEach((s,i)=>{html+='<div class="seg-block" data-seg="'+i+'">';html+='<div class="seg-num">Sujet '+(i+1)+' / '+jt.segments.length+' — '+esc(s.emotion||'')+'</div>';html+='<div class="seg-headline">'+esc(s.headline)+'</div>';html+='<div class="seg-summary">'+esc(s.summary)+'</div>';if(s.host_dialogue)html+='<div class="seg-dialogue"><span class="spk">🎙️ '+esc(jt.host.name)+' (plateau)</span>« '+esc(s.host_dialogue)+' »</div>';if(s.host_action)html+='<div class="seg-action">🎬 Plateau hook : '+esc(s.host_action.slice(0,180))+(s.host_action.length>180?'…':'')+'</div>';if(s.people&&s.people.length>0){html+='<div class="seg-cast">👥 Casting sur place : ';html+=s.people.map(p=>'<strong>'+esc(p.name)+'</strong> ('+esc(p.role)+')').join(' · ');html+='</div>'}if(s.reporter){html+='<div class="seg-dialogue"><span class="spk">📍 '+esc(s.reporter.name)+' (sur place)</span>« '+esc(s.reporter.dialogue)+' »</div>';if(s.scene_action)html+='<div class="seg-action">🎬 Reporter hook : '+esc(s.scene_action.slice(0,200))+(s.scene_action.length>200?'…':'')+'</div>';html+='<div class="seg-loc">📍 '+esc((s.location||'').slice(0,160))+'</div>';if(s.camera_plan)html+='<div class="seg-action">📷 Caméra : '+esc(s.camera_plan.slice(0,140))+(s.camera_plan.length>140?'…':'')+'</div>'}html+='</div>'});card.innerHTML=html;panel.classList.add('visible')}
+
+function renderImagesGrid(){const grid=document.getElementById('images-grid');if(!grid||!state.jt)return;let html='';if(state.hostImage)html+='<div class="image-card host"><img src="'+state.hostImage+'" alt=""><div class="img-label">🎙️ Plateau</div></div>';else html+='<div class="image-card loading host">Plateau…</div>';state.jt.segments.forEach((s,i)=>{const img=state.sceneImages['reporter-'+i];if(img&&img.url)html+='<div class="image-card reporter"><img src="'+img.url+'" alt=""><div class="img-label">📍 '+esc(s.reporter.name)+'</div></div>';else html+='<div class="image-card loading reporter">Reporter '+(i+1)+'…</div>'});grid.innerHTML=html}
+function updateHostImageCard(url){const el=document.querySelector('.image-card.host');if(!el)return;el.classList.remove('loading');el.innerHTML='<img src="'+url+'" alt=""><div class="img-label">🎙️ Plateau</div>'}
+function updateReporterImageCard(index,url,name){const cards=document.querySelectorAll('.image-card.reporter');const el=cards[index];if(!el)return;el.classList.remove('loading');el.innerHTML='<img src="'+url+'" alt=""><div class="img-label">📍 '+esc(name)+'</div>'}
+
+function renderQueue(){
+  const queueEl=document.getElementById('queue');if(!queueEl)return;
+  if(!state.videos.length){queueEl.style.display='none';return}
+  const total=state.videos.length;
+  const done=state.videos.filter(v=>v.status==='done').length;
+  const failed=state.videos.filter(v=>v.status==='failed').length;
+  const inProg=state.videos.filter(v=>v.status==='processing'||v.status==='creating').length;
+  const pending=total-done-failed-inProg;
+  const eta=pending>0 ? pending*LTX_AVG_SECONDS_PER_CLIP + 30 : 0;
+  let html='<div class="queue-summary"><span class="qs-progress">CLIPS LTX : '+done+'/'+total+'</span>';
+  if(failed>0)html+='<span style="color:var(--err);">'+failed+' échec'+(failed>1?'s':'')+'</span>';
+  html+='<span class="qs-eta">'+(done+failed<total?'≈ '+formatEta(eta)+' restant (est.)':'Terminé')+'</span></div>';
+  html+=state.videos.map(item=>{
+    let icon='○',statusText='En file',cls='pending';
+    if(item.status==='creating'){icon='◐';statusText='Préparation…';cls='creating'}
+    else if(item.status==='processing'){icon='◐';statusText=item.progress||'En cours…';cls='processing'}
+    else if(item.status==='done'){icon='●';statusText='Terminé';cls='done'}
+    else if(item.status==='failed'){icon='✕';statusText=item.progress||'Échec';cls='failed'}
+    return'<div class="queue-item '+cls+'"><div class="q-icon">'+icon+'</div><div class="q-name">'+esc(item.label)+'</div><div class="q-status">'+esc(statusText)+'</div></div>';
+  }).join('');
+  queueEl.innerHTML=html;queueEl.style.display='block';
+}
+function markSeg(segIndex,status){const el=document.querySelector('.seg-block[data-seg="'+segIndex+'"]');if(!el)return;el.classList.remove('active','done');if(status)el.classList.add(status)}
+
+function ensureJTGallerySkeleton(){
+  const galleryEl=document.getElementById('gallery');const grid=document.getElementById('gallery-grid');if(!galleryEl||!grid||!state.jt)return;
+  if(grid.dataset.built==='1')return;
+  grid.innerHTML='';
+  state.jt.segments.forEach((s,i)=>{
+    const seg=document.createElement('div');seg.className='jt-segment';seg.dataset.seg=i;
+    const castLine=(s.people||[]).map(p=>p.name+' ('+p.role+')').join(' · ');
+    seg.innerHTML=
+      '<div class="jt-segment-info"><div class="jt-seg-headline">📰 '+esc(s.headline)+'</div><div class="jt-seg-summary">'+esc(s.summary)+'</div>'+
+      (castLine?'<div class="seg-cast">👥 '+esc(castLine)+'</div>':'')+'</div>'+
+      '<div class="jt-segment-videos">'+
+        '<div class="jt-video host" data-video="host-'+i+'"><div class="jt-video-placeholder">🎙️ Plateau — en attente…</div><div class="jt-video-label"><span class="who">🎙️ '+esc(state.jt.host.name)+'</span><span class="loc">Plateau</span></div></div>'+
+        '<div class="jt-video reporter" data-video="reporter-'+i+'"><div class="jt-video-placeholder">📍 Sur place — en attente…</div><div class="jt-video-label"><span class="who">📍 '+esc(s.reporter.name)+'</span><span class="loc">'+esc((s.location||'').slice(0,40))+'</span></div></div>'+
+      '</div>';
+    grid.appendChild(seg);
+  });
+  grid.dataset.built='1';galleryEl.style.display='block';
+}
+function setJTVideo(videoKey,url){
+  const el=document.querySelector('.jt-video[data-video="'+videoKey+'"]');if(!el)return;
+  const ph=el.querySelector('.jt-video-placeholder');if(ph)ph.remove();
+  const ex=el.querySelector('video');if(ex)ex.remove();
+  const v=document.createElement('video');v.controls=true;v.preload='metadata';v.playsInline=true;v.src=url;
+  el.insertBefore(v,el.firstChild);
+}
+
+function addMediaLogEntry(kind,url){
+  const log=document.getElementById('media-log');if(!log)return;
+  const empty=log.querySelector('div[style]');if(empty)empty.remove();
+  const time=new Date().toLocaleTimeString('fr-FR',{hour12:false});
+  const el=document.createElement('div');el.className='media-log-entry';
+  const displayUrl=url.length>120?url.slice(0,120)+'…':url;
+  el.innerHTML='<span style="font-size:.58rem;padding:.15rem .4rem;border-radius:2px;text-transform:uppercase;font-weight:700;background:rgba(232,123,53,.15);color:var(--acc2);">'+kind+'</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--acc);font-size:.66rem;"><a href="'+esc(url)+'" target="_blank" rel="noopener" style="color:var(--acc);text-decoration:none;">'+esc(displayUrl)+'</a></span><span style="color:var(--faint);font-size:.62rem;">'+time+'</span>';
+  log.appendChild(el);
+  const countEl=document.getElementById('medialog-count');if(countEl)countEl.textContent=String(log.querySelectorAll('.media-log-entry').length);
+}
+
+/* =============================================================================
+   Bridge LTX / Modal
+   ============================================================================= */
+async function checkLtxBridge(){
+  try{
+    const t0=Date.now();
+    const res=await fetch(LTX_BRIDGE+'/health',{method:'GET'});
+    const dt=Date.now()-t0;
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    state.bridgeReady=!!data.modal_ready;
+    updateTimingDisplay();
+    debugLog('success','LTX_BRIDGE','Bridge OK en '+dt+'ms',data);
+    return {ok:true, modal_ready:!!data.modal_ready, detail:data.detail};
+  }catch(e){
+    state.bridgeReady=false;updateTimingDisplay();
+    debugLog('error','LTX_BRIDGE','Bridge indisponible : '+e.message);
+    return {ok:false, detail:e.message};
+  }
+}
+
+function buildLtxBatch(jt){
+  const items=[];
+  for(const item of state.videos){
+    const isHost=item.key.startsWith('host-');
+    const segIdx=parseInt(item.key.split('-')[1],10);
+    const seg=jt.segments[segIdx];
+    const imageUrl=isHost ? state.hostImage : (state.sceneImages['reporter-'+segIdx] && state.sceneImages['reporter-'+segIdx].url);
+    if(!imageUrl)continue;
+    const prompt=isHost
+      ? buildHostVideoPrompt(jt,seg,segIdx,state.director,state.palette)
+      : buildReporterVideoPrompt(jt,seg,segIdx,state.director,state.palette);
+    items.push({
+      key:item.key,
+      image_url:imageUrl,
+      prompt:prompt,
+      duration:state.durationSeconds,   // = 5
+      fps:24,
+      seed:(Date.now() + segIdx*7919 + (isHost?0:1)) % (2**31),
+    });
+  }
+  return items;
+}
+
+async function renderLtxBatch(batchItems){
+  const res=await fetch(LTX_BRIDGE+'/render-batch',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({items:batchItems}),
+  });
+  if(!res.ok){
+    let err='';
+    try{err=await res.text()}catch(e){}
+    throw new Error('Bridge /render-batch HTTP '+res.status+' — '+err.slice(0,500));
+  }
+  return await res.json();
+}
+
+/* =============================================================================
+   Boucle principale
+   ============================================================================= */
+async function startJT(){
+  if(state.isRunning)return;
+  if(!getApiKey()){showToast('Ajoutez votre clé API','error');document.getElementById('api-key-input').focus();return}
+
+  state.isRunning=true;state.stopRequested=false;
+  state.jt=null;state.rawScenarioResponse='';
+  state.hostImage=null;state.sceneImages={};state.videos=[];
+
+  document.getElementById('jt-card').innerHTML='';
+  document.getElementById('jt-panel').classList.remove('visible');
+  document.getElementById('images-grid').innerHTML='';
+  document.getElementById('queue').innerHTML='';
+  document.getElementById('queue').style.display='none';
+  document.getElementById('raw-scenario').textContent='';
+  document.getElementById('media-log').innerHTML='<div style="font-size:.72rem;color:var(--dim);font-family:var(--fm);">Les URLs apparaîtront ici.</div>';
+  document.getElementById('medialog-count').textContent='0';
+  document.getElementById('gallery-grid').innerHTML='';
+  document.getElementById('gallery-grid').dataset.built='0';
+  document.getElementById('gallery').style.display='none';
+  document.getElementById('stop-btn').classList.add('visible');
+  document.getElementById('jt-btn').disabled=true;
+  document.getElementById('phase-bar').classList.add('visible');
+
+  await ensureWakeLockActive();
+  const totalStart=Date.now();
+  debugLog('state','START','════════════════════════════════════════');
+  debugLog('state','START','DÉMARRAGE DU JT (LTX / Modal)');
+  debugLog('state','CONFIG','Sujets : '+state.segCount);
+  debugLog('state','CONFIG','Réalisateur : '+DIRECTORS[state.director].label);
+  debugLog('state','CONFIG','Palette : '+PALETTES[state.palette].label);
+  debugLog('state','CONFIG','Durée LTX : '+state.durationSeconds+'s · 9:16 · 0.4 MP · 24 fps · Enhance OFF');
+
+  try{
+    /* ---- Phase 1 : NEWS ---- */
+    setPhase('text','📡 Récupération des actualités…','');
+    setStatus('Chargement des Google News…');
+    const category=document.getElementById('news-category').value;
+    const newsResult=await fetchGoogleNewsRSSWithFallback(category);
+    state.newsItems=newsResult.items;state.newsMethod=newsResult.method;
+    renderNewsList();
+    document.getElementById('news-status').textContent=newsResult.items.length+' actualités chargées ('+(newsResult.method==='demo'?'mode démo':'via '+newsResult.method)+').';
+    debugLog('success','NEWS',newsResult.items.length+' items via '+newsResult.method);
+
+    /* ---- Phase 2 : SCÉNARIO ---- */
+    setPhase('text','🧠 Analyse IA — sélection des '+state.segCount+' infos…','');
+    const jt=await generateJTScenario(state.newsItems,state.segCount,state.director,state.palette);
+    state.jt=jt;state.segCount=jt.segments.length;
+    renderJT();ensureJTGallerySkeleton();renderImagesGrid();
+
+    state.videos=[];
+    jt.segments.forEach((s,i)=>{
+      state.videos.push({key:'host-'+i,label:'🎙️ Plateau — sujet '+(i+1),status:'pending',progress:null,videoUrl:null,startTime:null});
+      state.videos.push({key:'reporter-'+i,label:'📍 '+s.reporter.name+' + casting — sujet '+(i+1),status:'pending',progress:null,videoUrl:null,startTime:null});
+    });
+    renderQueue();
+
+    /* ---- Phase 3 : IMAGES ---- */
+    setPhase('images','🎨 Création du chroniqueur plateau…','');
+    setStatus('Création de l\'image du plateau…');
+    const hostPrompt=buildHostImagePrompt(jt.host,state.director,state.palette);
+    try{
+      const hostUrl=await generateImage(hostPrompt);
+      state.hostImage=hostUrl;updateHostImageCard(hostUrl);addMediaLogEntry('image',hostUrl);
+      debugLog('success','HOST','Image plateau OK');
+    }catch(e){debugLog('warn','HOST','Échec : '+e.message)}
+
+    setPhase('images','🎨 Création des '+state.segCount+' équipes sur place…','');
+    const imageQueue=createRateLimitedQueue(IMAGE_PARALLEL,IMAGE_INTERVAL_MS);
+    const reporterTasks=[];
+    for(let i=0;i<jt.segments.length;i++){
+      const idx=i;const seg=jt.segments[idx];
+      const prompt=buildReporterImagePrompt(seg,state.director,state.palette);
+      reporterTasks.push(imageQueue.add(async()=>{
+        if(state.stopRequested)return;
+        try{
+          const url=await generateImage(prompt);
+          state.sceneImages['reporter-'+idx]={url,name:seg.reporter.name};
+          updateReporterImageCard(idx,url,seg.reporter.name);
+          addMediaLogEntry('image',url);debugLog('success','REPORTER '+(idx+1),'OK');
+        }catch(e){
+          if(e.message==='Arrêt demandé')return;
+          debugLog('error','REPORTER '+(idx+1),e.message);
+        }
+      }));
+    }
+    await Promise.allSettled(reporterTasks);
+    await imageQueue.idle();
+
+    /* ---- Phase 4 : BATCH LTX / MODAL ---- */
+    setPhase('videos','🔌 Vérification du bridge LTX local…','');
+    setStatus('Connexion au bridge LTX local…');
+    const bridge=await checkLtxBridge();
+    if(!bridge.ok){
+      const msg='Backend LTX local indisponible ('+LTX_BRIDGE+')';
+      debugLog('error','LTX',msg+(bridge.detail?' — '+bridge.detail:''));
+      showToast(msg,'error',6000);
+      state.videos.forEach(v=>{v.status='failed';v.progress='Bridge indisponible'});
+      renderQueue();
+      setStatus(msg);
+      throw new Error(msg);
+    }
+    if(!bridge.modal_ready){
+      const msg='Modal non résolu — exécute `modal deploy newsreel_ltx_modal.py`';
+      debugLog('error','LTX',msg+(bridge.detail?' — '+bridge.detail:''));
+      showToast(msg,'error',7000);
+      state.videos.forEach(v=>{v.status='failed';v.progress='Modal non prêt'});
+      renderQueue();
+      setStatus(msg);
+      throw new Error(msg);
+    }
+
+    const batch=buildLtxBatch(jt);
+    if(batch.length===0){
+      debugLog('error','LTX','Batch vide — aucune image disponible');
+      state.videos.forEach(v=>{v.status='failed';v.progress='Image manquante'});
+      renderQueue();
+      throw new Error('Batch LTX vide');
+    }
+    debugLog('state','LTX_BATCH',batch.length+' clips à générer');
+
+    state.videos.forEach(v=>{
+      if(batch.find(b=>b.key===v.key)){v.status='processing';v.progress='En file LTX…';v.startTime=Date.now();}
+      else{v.status='failed';v.progress='Image manquante';}
+    });
+    renderQueue();
+
+    setPhase('videos','🚀 Batch LTX → GPU Modal ('+batch.length+' clips)',
+      'estimation ~'+formatEta(batch.length*LTX_AVG_SECONDS_PER_CLIP + 30));
+    let liveElapsed=0;
+    const liveTimer=setInterval(()=>{
+      liveElapsed++;
+      setStatus('Batch LTX en cours — '+Math.floor(liveElapsed/60)+'m'+(liveElapsed%60)+'s · '+batch.length+' clips');
+    },1000);
+
+    let batchResult=null;
+    try{
+      batchResult=await renderLtxBatch(batch);
+    }finally{
+      clearInterval(liveTimer);
+    }
+
+    if(batchResult&&batchResult.metrics){
+      const m=batchResult.metrics;
+      debugLog('success','LTX_METRICS',
+        'ComfyUI startup '+(m.comfy_startup_s?m.comfy_startup_s.toFixed(1)+'s':'?')+
+        ' · session totale '+(m.session_total_s?m.session_total_s.toFixed(1)+'s':'?'));
+    }
+    if(batchResult&&batchResult.run_id)debugLog('info','LTX_BATCH','run_id = '+batchResult.run_id);
+
+    for(const r of (batchResult&&batchResult.results)||[]){
+      const item=state.videos.find(v=>v.key===r.key);
+      if(!item)continue;
+      if(r.ok&&r.url){
+        item.status='done';item.videoUrl=r.url;item.progress='Terminé';
+        setJTVideo(item.key,r.url);
+        addMediaLogEntry('video',r.url);
+        if(!item.key.startsWith('host-'))markSeg(parseInt(item.key.split('-')[1],10),'done');
+        debugLog('success',item.key,'OK'+(r.elapsed?' en '+r.elapsed.toFixed(1)+'s':''));
+      }else{
+        item.status='failed';item.progress=(r.error||'Échec').slice(0,80);
+        debugLog('error',item.key,r.error||'Échec');
+      }
+      renderQueue();
+    }
+
+    setPhase('done','✦ JT terminé ✦','');
+
+  }catch(e){
+    debugLog('error','GLOBAL',e.message);
+  }
+
+  const totalElapsed=(Date.now()-totalStart)/1000;
+  const doneV=state.videos.filter(v=>v.status==='done').length;
+  const totalV=state.videos.length;
+  const summary=state.stopRequested
+    ?'Arrêté — '+doneV+'/'+totalV+' vidéos'
+    :'✦ JT prêt — '+doneV+'/'+totalV+' vidéos en '+formatEta(totalElapsed)+' ✦';
+  debugLog('state','FIN',summary);
+  debugLog('state','FIN','════════════════════════════════════════');
+  setStatus(summary);
+  await sleep(4500);setStatus(null);
+  state.isRunning=false;state.stopRequested=false;
+  document.getElementById('stop-btn').classList.remove('visible');
+  updateJTButton();
+  if(doneV>0)showToast(doneV+' vidéo'+(doneV>1?'s':'')+' générée'+(doneV>1?'s':''),'success',4000);
+  else showToast('Aucune vidéo générée','error',3500);
+  await deactivateWakeLock();
+}
+
+/* =============================================================================
+   Init
+   ============================================================================= */
+(function init(){
+  const saveBtn=document.getElementById('api-save-btn');if(saveBtn)saveBtn.addEventListener('click',saveApiKey);
+  const apiInput=document.getElementById('api-key-input');if(apiInput)apiInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveApiKey()}});
+  const stopBtn=document.getElementById('stop-btn');if(stopBtn)stopBtn.addEventListener('click',()=>{state.stopRequested=true;debugLog('warn','STOP','Arrêt demandé');setStatus('Arrêt en cours…')});
+
+  document.querySelectorAll('[data-toggle]').forEach(header=>header.addEventListener('click',()=>{document.getElementById(header.dataset.toggle).classList.toggle('open')}));
+
+  const segSelect=document.getElementById('seg-count-select');if(segSelect)segSelect.addEventListener('change',e=>{state.segCount=parseInt(e.target.value,10);updateJTButton()});
+  // duration-select : verrouillé sur 5 s, on garde l'écouteur pour compat
+  const durationSelect=document.getElementById('duration-select');
+  if(durationSelect)durationSelect.addEventListener('change',e=>{state.durationSeconds=parseInt(e.target.value,10)||5;updateJTButton()});
+  const resolutionSelect=document.getElementById('resolution-select');if(resolutionSelect)resolutionSelect.addEventListener('change',e=>{state.resolution=e.target.value;updateJTButton()});
+  const intensitySelect=document.getElementById('intensity-select');if(intensitySelect)intensitySelect.addEventListener('change',e=>{state.intensity=e.target.value});
+  const directorSelect=document.getElementById('director-select');if(directorSelect)directorSelect.addEventListener('change',e=>{state.director=e.target.value;updateJTButton()});
+  document.querySelectorAll('.palette-btn').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.palette-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');state.palette=btn.dataset.palette;updateJTButton()}));
+
+  const jtBtn=document.getElementById('jt-btn');if(jtBtn)jtBtn.addEventListener('click',startJT);
+
+  const debugHeader=document.getElementById('debug-header');if(debugHeader)debugHeader.addEventListener('click',e=>{if(e.target.tagName==='BUTTON')return;toggleDebugCollapse()});
+  const debugCollapseBtn=document.getElementById('debug-collapse-btn');if(debugCollapseBtn)debugCollapseBtn.addEventListener('click',e=>{e.stopPropagation();toggleDebugCollapse()});
+  const debugClearBtn=document.getElementById('debug-clear-btn');if(debugClearBtn)debugClearBtn.addEventListener('click',e=>{e.stopPropagation();clearDebug()});
+  const debugCopyBtn=document.getElementById('debug-copy-btn');if(debugCopyBtn)debugCopyBtn.addEventListener('click',e=>{e.stopPropagation();copyDebug()});
+
+  const rawToggle=document.getElementById('raw-scenario-toggle');
+  if(rawToggle){rawToggle.addEventListener('click',()=>{const el=document.getElementById('raw-scenario');if(!el)return;el.style.display=el.style.display==='none'?'block':'none';rawToggle.textContent=el.style.display==='none'?'▸ Voir la réponse brute du scénario (JSON)':'▾ Masquer'})}
+
+  try{const saved=localStorage.getItem(WAKE_LOCK_PREF);wakeLockEnabled=saved==='1'}catch(e){}
+  if(wakeLockEnabled)activateWakeLock();
+
+  updateApiPanel();updateTimingDisplay();renderNewsList();
+
+  const savedKey=getApiKey();if(savedKey)document.getElementById('api-key-input').value=savedKey;
+
+  debugLog('success','INIT','NewsReel Studio — LTX/Modal prêt');
+  debugLog('info','INIT','Pipeline : NEWS RSS → SCÉNARIO JT → IMAGES AGNES → BATCH LTX/MODAL');
+  debugLog('info','INIT','Bridge LTX : '+LTX_BRIDGE);
+  debugLog('info','INIT','Modèles : '+MODEL_TEXT+' / '+MODEL_IMAGE+'  |  Vidéo : LTX-2.5 Distilled INT8 ConvRot (Modal A10G)');
+  debugLog('info','INIT','LTX : '+state.durationSeconds+'s · 9:16 · 0.4 MP · 24 fps · Prompt Enhance OFF');
+  debugLog('info','INIT','Modal : single_use_containers=True · max_containers=1 · GPU A10G');
+
+  checkLtxBridge();
+})();
+</script>
+</body>
+</html>
