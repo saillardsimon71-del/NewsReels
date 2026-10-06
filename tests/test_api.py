@@ -44,6 +44,10 @@ def test_local_endpoints_and_explicit_missing_credentials(tmp_path: Path, monkey
                 assert len(config["creative"]["directors"]) == 25
                 assert len(config["creative"]["palettes"]) == 16
 
+                recent = await client.get("/runs")
+                assert recent.status_code == 200
+                assert recent.json() == {"runs": []}
+
                 assert (await client.get("/run/absent")).status_code == 404
                 missing_key = await client.post(
                     "/runs", json={"query": "actualité France", "count": 3}
