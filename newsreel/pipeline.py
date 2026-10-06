@@ -16,6 +16,7 @@ from .creative import (
     build_reporter_image_prompt,
 )
 from .h3_worker_contract import H3BatchResult, H3Job, ModalH3Renderer, create_h3_jobs
+from .h3_workflow import h3_contract_config
 from .media import probe_media
 from .models import NewsItem, Scenario
 from .news import GoogleNewsRSS
@@ -69,6 +70,14 @@ class NewsReelPipeline:
                     "palette": palette,
                     "intensity": intensity,
                 },
+                agnes={
+                    "base_url": self.settings.agnes_base_url,
+                    "text_model": self.settings.agnes_text_model,
+                    "image_model": self.settings.agnes_image_model,
+                    "image_size": self.settings.agnes_image_size,
+                    "image_ratio": self.settings.agnes_image_ratio,
+                },
+                h3_contract=h3_contract_config(),
             )
             self.store.stage(
                 run_id, active_stage, "running", message="Récupération du flux Google News"
@@ -364,6 +373,36 @@ class NewsReelPipeline:
             },
         )
         return self.store.read_manifest(run_id)
+
+    def resume(self, run_id: str) -> dict[str, object]:
+        """Resume a persisted run from H3 or assembly without persisting the Agnes API key."""
+        run_dir = self.store.path(run_id)
+        manifest = self.store.read_manifest(run_id)
+        final_path = run_dir / "newsreel_final.mp4"
+        if manifest.get("status") == "complete" and final_path.is_file():
+            return manifest
+
+        scenario = self._load_scenario(run_dir)
+        expected_h3 = [
+            run_dir / "h3" / f"{role}-{index}.mp4"
+            for index in range(len(scenario.segments))
+            for role in ("host", "reporter")
+        ]
+        if expected_h3 and all(path.is_file() for path in expected_h3):
+            return self.reassemble(run_id)
+
+        host_image = run_dir / "images" / "host-plate.png"
+        reporter_images = [
+            run_dir / "images" / f"reporter-{index}.png"
+            for index in range(len(scenario.segments))
+        ]
+        if host_image.is_file() and all(path.is_file() for path in reporter_images):
+            return self.rerender_h3(run_id)
+
+        raise RuntimeError(
+            "Ce run s'est arrêté avant que les keyframes Agnes soient complètes. "
+            "La clé Agnes n'étant jamais persistée, démarrez un nouveau run depuis l'interface."
+        )
 
     def rerender_h3(self, run_id: str) -> dict[str, object]:
         run_dir = self.store.path(run_id)
