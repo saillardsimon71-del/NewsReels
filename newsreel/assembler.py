@@ -315,11 +315,11 @@ class FFmpegAssembler:
         elif scene.type == "h3_video":
             media = probe_media(source, self.settings)
             if not media.video:
-                raise AssemblyError(f"Le clip reporter n'a pas de flux vidéo: {source.name}")
+                raise AssemblyError(f"Le clip H3 n'a pas de flux vidéo: {source.name}")
             if not media.audio:
                 raise AssemblyError(
                     f"Le clip H3 {scene.id} n'a pas d'audio natif; l'assemblage s'arrête plutôt que "
-                    "de masquer l'absence de voix reporter."
+                    "de masquer l'absence de voix native."
                 )
             if media.duration < duration - (1 / timeline.fps):
                 raise AssemblyError(
