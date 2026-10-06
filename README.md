@@ -81,9 +81,10 @@ ComfyUI est piné sur :
 d49e888586dd8ae012c0667b33466b815fee07f7
 ```
 
-Cette révision correspond au HEAD ComfyUI disponible lors du premier smoke H3 réussi du
-6 octobre 2026. Un futur changement de `master` ne peut donc plus casser silencieusement
-un redéploiement.
+Cette révision correspond au HEAD ComfyUI figé pendant la passe de durcissement production
+du 6 octobre 2026. Le graphe et les paramètres H3 ont déjà été validés en smoke réel ; le
+prochain smoke doit confirmer ce pin exact après redéploiement. Un futur changement de
+`master` ne pourra ensuite plus casser silencieusement un redéploiement.
 
 Poids attendus dans le volume Modal `fasth3-models` :
 
@@ -170,7 +171,8 @@ Le studio permet de choisir :
 - direction artistique ;
 - palette ;
 - intensité ;
-- modèles et endpoint Agnes.
+- modèles et endpoint Agnes ;
+- chargement des runs récents persistés pour reprise après redémarrage du bridge.
 
 La clé Agnes est utilisée en mémoire puis effacée du champ après lancement. Elle n'est pas
 écrite dans `scenario.json`, `run_manifest.json` ou les logs applicatifs.
@@ -201,9 +203,10 @@ nouveau run : la clé Agnes n'est volontairement jamais persistée.
 
 Endpoints compatibles :
 
-- `POST /resume`
-- `POST /render-h3-batch`
-- `POST /assemble`
+- `GET /runs` — liste les runs récents persistés ;
+- `POST /resume` — choisit automatiquement H3 ou remontage ;
+- `POST /render-h3-batch` — force une relance H3 puis remonte ;
+- `POST /assemble` — remonte depuis les clips H3 existants.
 
 ## Démo et validation locale
 
