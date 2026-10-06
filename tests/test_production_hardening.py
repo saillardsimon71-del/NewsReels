@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from modal_h3 import validate_batch
+from newsreel.agnes import AgnesClient
 from newsreel.config import Settings
 from newsreel.creative import apply_creative_postprocessing, build_scenario_prompt
 from newsreel.h3_worker_contract import ModalH3Renderer, create_h3_jobs, encode_batch
@@ -201,3 +202,69 @@ def test_reassemble_recovers_without_existing_timeline(
     assert (run_dir / "timeline.json").is_file()
     assert result["final_file"] == "newsreel_final.mp4"
     assert result["h3_clip_count"] == 2
+
+
+def test_agnes_retries_once_when_headline_is_not_from_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(project_root=tmp_path)
+    client = AgnesClient(settings, "offline-key")
+    responses = iter(
+        [
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"jt_title":"JT","host":{},'
+                                '"segments":[{"headline":"Titre inventé",'
+                                '"host_dialogue":"Une information factuelle est annoncée depuis le plateau ce matin.",'
+                                '"reporter":{"dialogue":"Même le décor semble demander une pause syndicale aujourd’hui."}}]}'
+                            )
+                        }
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"jt_title":"JT","host":{},'
+                                '"segments":[{"headline":"Titre exact",'
+                                '"host_dialogue":"Une information factuelle est annoncée depuis le plateau ce matin.",'
+                                '"reporter":{"dialogue":"Même le décor semble demander une pause syndicale aujourd’hui."}}]}'
+                            )
+                        }
+                    }
+                ]
+            },
+        ]
+    )
+    calls: list[dict] = []
+
+    def fake_request(_endpoint, payload, timeout=None):
+        calls.append(payload)
+        return next(responses)
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    scenario = client.write_scenario(
+        [
+            NewsItem(
+                title="Titre exact",
+                url="https://example.test/source",
+                source="Agence Test",
+                published="Tue, 06 Oct 2026 10:00:00 GMT",
+                summary="Contexte factuel.",
+            )
+        ],
+        1,
+        director="wes_anderson",
+        palette="electric_coral_cyan",
+        intensity="strong",
+    )
+
+    assert len(calls) == 2
+    assert "CORRECTION REQUIRED AFTER INVALID OUTPUT" in calls[1]["messages"][1]["content"]
+    assert scenario.segments[0].title == "Titre exact"
+    assert scenario.segments[0].source_url == "https://example.test/source"
