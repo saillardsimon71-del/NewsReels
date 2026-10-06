@@ -457,39 +457,30 @@ def build_host_video_prompt(
     stani = segment.get("stanislavski") or host.get("stanislavski") or {}
     line = str(segment.get("host_dialogue", "")).strip()
     action = segment.get("host_action") or host.get("host_action") or ""
-    if not line:
-        raise ValueError("Le dialogue host H3 est vide.")
-
-    description = " ".join(
-        [
-            f"[Shot 1] {d['label']} visual language in a saturated retrofuturist television studio.",
-            "Use <Picture 1> as the exact identity, costume, set and composition reference for the opening frame.",
-            f"The studio is {host.get('plateau', '')}.",
-            f"The host is {host.get('name', '')}, {host.get('description', '')}.",
-            f"The host's acting objective is {stani.get('objective', 'deliver the news')}; the obstacle is {stani.get('obstacle', 'the absurd studio')}.",
-            f"Over this {duration_seconds:g}-second shot, {action}.",
-            "The host stays serious and factual while the visual joke escalates around them.",
-            f"Camera behavior follows {d['camera']}",
-            f"Visual style follows {d['style']}",
-            f"Lighting follows {d['lighting']}",
-            f"Image texture follows {d['film']}",
-            f"Use this palette: {p['full']}.",
-            f"Creative intensity: {intensity_rule}",
-            "Keep maximum rich color and never fall back to grey or desaturated imagery.",
-            "The host is the only speaking character, with one consistent natural French broadcast voice (S1), preserving the same timbre, apparent age, accent, cadence and vocal energy across studio segments.",
-            f"The host (S1) looks toward the camera and says: <d>[French] {line}</d>",
-            "No other character speaks or produces intelligible words. There is no narrator, voiceover, additional dialogue, subtitle, caption, logo, watermark or readable on-screen text.",
-        ]
-    )
     return "\n".join(
         [
-            "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.",
-            "",
-            f"integrated_multimodal_description: {description}",
-            "",
-            "overall_soundscape: Diegetic studio ambience only: restrained mechanical noises, physical comedy sounds, non-verbal reactions and occasional birds. No intelligible speech except the single <d> line in the integrated description.",
-            "",
-            "non_diegetic_music: N/A",
+            f"COMEDIC TV NEWS SKETCH — {duration_seconds:g} seconds.",
+            "The host delivers the actual news fact while the studio performs a visual joke around them.",
+            d["label"].upper() + ".",
+            f"HOST: {host.get('name', '')} — {host.get('description', '')}",
+            f"STANISLAVSKI: objective {stani.get('objective', 'deliver the news')}; obstacle {stani.get('obstacle', 'the absurd studio')}",
+            f"RETROFUTURIST STUDIO: {host.get('plateau', '')}",
+            f"VISUAL GAG: {action}",
+            "The host must remain the factual narrator; do not turn the host dialogue into a joke that changes the news.",
+            "COMEDIC STRUCTURE: immediate visual setup, escalating malfunction, host remains serious, final visual punchline.",
+            f"CAMERA: {d['camera']}",
+            f"STYLE: {d['style']}",
+            f"LIGHTING: {d['lighting']}",
+            f"FILM: {d['film']}",
+            f"PALETTE: {p['full']}",
+            f"CREATIVE INTENSITY: {intensity_rule}",
+            "SATURATION: maximum rich color; absolutely no grey/desaturated fallback.",
+            "SOUND: no music. Only diegetic foley, mechanical noises, reactions, and birds.",
+            "The host has one consistent natural French broadcast voice (S1): same timbre, apparent age, accent, cadence and vocal energy in every studio segment.",
+            "The host (S1) looks directly at the camera and says exactly one sentence:",
+            f"<d>[French] {line}</d>",
+            "No other character speaks, narrates, or produces intelligible words.",
+            "No subtitles, no readable text, no watermark, no logo.",
         ]
     )
 
@@ -506,48 +497,36 @@ def build_reporter_video_prompt(
     intensity_rule = _intensity(intensity)
     reporter = segment.get("reporter") or {}
     line = str(reporter.get("dialogue", "")).strip()
-    if not line:
-        raise ValueError("Le dialogue reporter H3 est vide.")
     people = segment.get("people") or []
     people_desc = " || ".join(
         f"{person.get('name', '')} ({person.get('role', '')}) — {person.get('description', '')}"
         for person in people
         if isinstance(person, dict)
     )
-    camera_plan = segment.get("camera_plan") or (
-        "establishing shot, reaction close-up, physical gag, punchline close-up, final wide"
-    )
-
-    description = " ".join(
-        [
-            f"[Shot 1] {d['label']} visual language in a saturated retrofuturist field-report scene.",
-            "Use <Picture 1> as the exact identity, costume, location and composition reference for the opening frame.",
-            f"The reporter is {reporter.get('name', '')}, {reporter.get('description', '')}.",
-            f"The supporting cast is {people_desc}.",
-            f"The location is {segment.get('location', '')}.",
-            f"Over this {duration_seconds:g}-second shot, the visual gag is: {segment.get('scene_action', '')}.",
-            "The supporting characters remain active and react physically without speaking.",
-            "The scene establishes the bizarre situation, escalates the physical gag, keeps the reporter journalistically serious, then peaks on the visual punchline.",
-            f"Camera behavior follows {camera_plan}; {d['camera']}",
-            f"Visual style follows {d['style']}",
-            f"Lighting follows {d['lighting']}",
-            f"Image texture follows {d['film']}",
-            f"Use this palette: {p['full']}.",
-            f"Creative intensity: {intensity_rule}",
-            "Keep maximum rich color on every frame and never fall back to grey, monochrome, desaturated or bland imagery.",
-            "The reporter is the only speaking character, with a clear natural French voice (S1).",
-            f"The reporter (S1) delivers the punchline while facing the camera and says: <d>[French] {line}</d>",
-            "No other character speaks or produces intelligible words. The reporter says no headline, factual summary, number, date or extra sentence beyond the single <d> line. There is no narrator, voiceover, subtitle, caption, logo, watermark or readable on-screen text.",
-        ]
-    )
+    camera_plan = segment.get("camera_plan") or "establishing shot, reaction close-up, physical gag, punchline close-up, final wide"
     return "\n".join(
         [
-            "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.",
-            "",
-            f"integrated_multimodal_description: {description}",
-            "",
-            "overall_soundscape: Diegetic field ambience only: environmental sound, physical comedy foley, non-verbal human reactions and occasional birds. No intelligible speech except the single <d> line in the integrated description.",
-            "",
-            "non_diegetic_music: N/A",
+            f"COMPLETE COMEDIC FIELD-REPORT SKETCH — {duration_seconds:g} seconds.",
+            d["label"].upper() + ".",
+            f"REPORTER: {reporter.get('name', '')} — {reporter.get('description', '')}",
+            f"RETROFUTURIST CAST: {people_desc}",
+            f"LOCATION: {segment.get('location', '')}",
+            f"FULL VISUAL GAG: {segment.get('scene_action', '')}",
+            "All characters are active. The reporter has a concrete comic problem caused by the news-related situation.",
+            "COMEDIC STRUCTURE: 1) establish the bizarre situation; 2) escalate physically; 3) reporter tries to maintain journalistic seriousness; 4) the gag peaks; 5) reporter delivers the punchline while the visual chaos continues.",
+            "The reporter is the only speaking character. The reporter does not repeat the host, headline, summary, numbers, names, dates or factual explanation.",
+            f"CAMERA: {camera_plan}; {d['camera']}",
+            f"STYLE: {d['style']}",
+            f"LIGHTING: {d['lighting']}",
+            f"FILM: {d['film']}",
+            f"PALETTE: {p['full']}",
+            f"CREATIVE INTENSITY: {intensity_rule}",
+            "SATURATION: maximum rich color on every frame; never grey, monochrome, desaturated or bland.",
+            "SOUND: no music. Only diegetic foley, physical comedy sounds, environmental ambience and birds.",
+            "The reporter has a clear natural French voice (S1).",
+            "The reporter (S1) looks toward the camera and says exactly one sentence:",
+            f"<d>[French] {line}</d>",
+            "All supporting characters remain non-verbal; there is no narrator or voiceover.",
+            "No subtitles, no readable text, no watermark, no logo.",
         ]
     )

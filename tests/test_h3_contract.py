@@ -92,23 +92,21 @@ def test_full_h3_prompts_keep_creativity_dialogue_and_stability(tmp_path: Path) 
     host_prompt = build_host_prompt(scenario, scenario.segments[0])
     reporter_prompt = build_reporter_prompt(scenario.segments[0])
     for prompt in (host_prompt, reporter_prompt):
-        assert prompt.startswith(
-            "For the target video, at 0.00 seconds into the target video, "
-            "<Picture 1> (from [Shot 1]) is fully referenced.\n\n"
-        )
-        assert "integrated_multimodal_description: [Shot 1]" in prompt
         assert "Preserve the same face, hairstyle, costume, set design" in prompt
         assert "Keep anatomy, faces, hands and fingers coherent" in prompt
-        assert "avoid morphing, duplication, identity drift" in prompt
-        assert "\n\noverall_soundscape:" in prompt
-        assert prompt.endswith("\n\nnon_diegetic_music: N/A")
-        assert prompt.count("<d>[French] ") == 1
-        assert prompt.count("</d>") == 1
+        assert "Avoid morphing, duplication, identity drift" in prompt
+        assert "<d>[French] " in prompt
+    assert "VISUAL GAG" in host_prompt
+    assert "RETROFUTURIST STUDIO" in host_prompt
+    assert "COMPLETE COMEDIC FIELD-REPORT SKETCH" in reporter_prompt
+    assert "FULL VISUAL GAG" in reporter_prompt
 
     assert host_prompt.count(scenario.segments[0].host_dialogue) == 1
     assert reporter_prompt.count(scenario.segments[0].reporter_dialogue) == 1
-    assert "visual joke" in host_prompt.lower()
-    assert "visual gag" in reporter_prompt.lower()
+    assert host_prompt.count("<d>[French] ") == 1
+    assert reporter_prompt.count("<d>[French] ") == 1
+    assert "No other character speaks" in host_prompt
+    assert "supporting characters remain non-verbal" in reporter_prompt
 
     jobs = _six_jobs(tmp_path)
     assert [job.id for job in jobs] == [
