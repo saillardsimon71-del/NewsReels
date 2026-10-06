@@ -39,7 +39,7 @@ class Settings:
     h3_fps: int = H3_FPS
     h3_duration_seconds: float = H3_DURATION_SECONDS
     h3_steps: int = H3_STEPS
-    max_news_items: int = 12
+    max_news_items: int = 20
 
     def __post_init__(self) -> None:
         root = Path(self.project_root).expanduser().resolve()
