@@ -13,6 +13,21 @@ INTENSITY_LEVELS = {
     "strong": "Forte — cinématographique",
 }
 
+INTENSITY_RULES = {
+    "subtle": (
+        "Controlled absurdity: keep one primary visual gag clearly readable, restrained motion, "
+        "clean staging and deadpan performances. Do not remove the retrofuturist identity."
+    ),
+    "moderate": (
+        "Clear comic escalation: one main gag plus secondary visual beats, expressive blocking "
+        "and purposeful camera movement while preserving readability and character stability."
+    ),
+    "strong": (
+        "Bold cinematic escalation: dense but readable retrofuturist spectacle, several coordinated "
+        "visual beats, stronger reactions and ambitious camera language without chaotic identity drift."
+    ),
+}
+
 DIRECTORS: dict[str, dict[str, str]] = {
     "wes_anderson": {"label": "Wes Anderson", "style": "Perfect bilateral symmetry, centered frontal composition, planimetric staging, dry deadpan comedy, whimsical miniature-like production design, precise theatrical blocking.", "camera": "Locked symmetrical frames, lateral whip pans, short dolly-ins, graphic centered compositions.", "lighting": "Soft studio light with deliberate practical color blocks and clean separation.", "film": "35mm-inspired texture, subtle halation, crisp production design."},
     "kubrick": {"label": "Stanley Kubrick", "style": "One-point perspective, obsessive geometry, symmetrical architecture, unsettling precision, theatrical absurdity beneath clinical seriousness.", "camera": "Slow zooms, centered wide angles, controlled tracking, geometric vanishing points.", "lighting": "Hard motivated practicals with sculpted pools of light.", "film": "35mm-inspired grain, deep focus, high micro-detail."},
@@ -103,6 +118,19 @@ def _palette(key: str) -> dict[str, str]:
         raise ValueError(f"Palette inconnue: {key}") from exc
 
 
+def _intensity(key: str) -> str:
+    try:
+        return INTENSITY_RULES[key]
+    except KeyError as exc:
+        raise ValueError(f"Intensité inconnue: {key}") from exc
+
+
+def _news_field(item: Any, name: str) -> str:
+    if isinstance(item, dict):
+        return str(item.get(name, "") or "").strip()
+    return str(getattr(item, name, "") or "").strip()
+
+
 def creative_catalog() -> dict[str, Any]:
     return {
         "directors": [{"value": key, "label": value["label"]} for key, value in DIRECTORS.items()],
@@ -116,18 +144,39 @@ def creative_catalog() -> dict[str, Any]:
     }
 
 
-def build_scenario_prompt(news_items: list[Any], seg_count: int, director: str, palette: str) -> str:
+def build_scenario_prompt(
+    news_items: list[Any],
+    seg_count: int,
+    director: str,
+    palette: str,
+    intensity: str = DEFAULT_INTENSITY,
+) -> str:
     d = _director(director)
     p = _palette(palette)
+    intensity_rule = _intensity(intensity)
 
-    def title_of(item: Any) -> str:
-        if isinstance(item, dict):
-            return str(item.get("title", "")).strip()
-        return str(getattr(item, "title", "")).strip()
-
-    news_list = "\n".join(
-        f"{index + 1}. {title}" for index, item in enumerate(news_items[:20]) if (title := title_of(item))
-    )
+    news_blocks: list[str] = []
+    for index, item in enumerate(news_items[:20], start=1):
+        title = _news_field(item, "title")
+        if not title:
+            continue
+        source = _news_field(item, "source") or "Source non précisée"
+        published = _news_field(item, "published") or "Date non précisée"
+        context = _news_field(item, "summary") or "Aucun contexte supplémentaire fourni."
+        if len(context) > 1200:
+            context = context[:1197].rstrip() + "..."
+        news_blocks.append(
+            "\n".join(
+                [
+                    f"[NEWS {index}]",
+                    f"HEADLINE: {title}",
+                    f"SOURCE: {source}",
+                    f"PUBLISHED: {published}",
+                    f"CONTEXT: {context}",
+                ]
+            )
+        )
+    news_list = "\n\n".join(news_blocks)
     return "\n".join(
         [
             "You are the head writer of a short-form satirical TV news show based on TODAY'S NEWS.",
@@ -141,12 +190,13 @@ def build_scenario_prompt(news_items: list[Any], seg_count: int, director: str, 
             "- The visual action must create a comic situation that gives the reporter a reason to say the joke.",
             "- Each clip must feel like a self-contained sketch with setup → escalation → visual gag → punchline.",
             "",
-            "NEWS LIST (Google News, today):",
+            "NEWS SOURCES (Google News, today):",
             news_list,
             "",
             "ABSOLUTE FACT RULE:",
-            "- headline: copy the EXACT selected news title verbatim.",
-            "- summary: only facts supported by the supplied title/news context. Never invent numbers, names, dates or events.",
+            "- headline: copy the EXACT selected HEADLINE verbatim.",
+            "- Use ONLY the supplied HEADLINE / SOURCE / PUBLISHED / CONTEXT blocks for factual claims.",
+            "- summary: only facts supported by the selected news block. Never invent numbers, names, dates or events.",
             "- host_dialogue: factual TV-news statement based on the summary, 8-16 French words.",
             "- reporter.dialogue: NOT factual repetition. Exactly one funny French sentence, 8-18 words, reacting to the physical gag.",
             "",
@@ -157,6 +207,9 @@ def build_scenario_prompt(news_items: list[Any], seg_count: int, director: str, 
             "- The reporter remains committed as if this were serious journalism.",
             "- The joke must be different for every segment.",
             '- Avoid generic jokes such as "cest le chaos", "je ne sais plus quoi dire", "on est en direct" or simple repetition of the headline.',
+            "",
+            f"CREATIVE INTENSITY — {INTENSITY_LEVELS[intensity].upper()}:",
+            intensity_rule,
             "",
             "VISUAL WORLD — MANDATORY FOR ALL CHARACTERS AND SETS:",
             "- Every human character wears a clearly retrofuturistic, funny, extravagant costume appropriate to their role: oversized collars, strange helmets, chrome accessories, absurd pockets, geometric shoulder pieces, unusual glasses, inflatable details, retro sci-fi fabrics or ridiculous functional gadgets.",
@@ -243,14 +296,11 @@ def apply_creative_postprocessing(
         if not host.get("host_action"):
             host["host_action"] = DEFAULT_HOST_FALLBACK_ACTION
 
-    if len(segments) < seg_count:
-        last = deepcopy(segments[-1])
-        while len(segments) < seg_count:
-            clone = deepcopy(last)
-            clone["segment_number"] = len(segments) + 1
-            segments.append(clone)
-    elif len(segments) > seg_count:
-        del segments[seg_count:]
+    if len(segments) != seg_count:
+        raise ValueError(
+            f"Le scénario doit contenir exactement {seg_count} sujets, reçu {len(segments)}. "
+            "Aucun sujet n'est dupliqué ou tronqué silencieusement."
+        )
 
     for index, segment in enumerate(segments):
         if not isinstance(segment, dict):
@@ -322,9 +372,12 @@ def apply_creative_postprocessing(
     return jt
 
 
-def build_image_style_block(director: str, palette: str) -> str:
+def build_image_style_block(
+    director: str, palette: str, intensity: str = DEFAULT_INTENSITY
+) -> str:
     d = _director(director)
     p = _palette(palette)
+    intensity_rule = _intensity(intensity)
     return "\n".join(
         [
             f"VISUAL STYLE: {d['style']}",
@@ -332,6 +385,7 @@ def build_image_style_block(director: str, palette: str) -> str:
             f"LIGHTING: {d['lighting']}",
             f"IMAGE TEXTURE: {d['film']}",
             f"COLOR RULE — ONLY THIS PALETTE: {p['full']}",
+            f"CREATIVE INTENSITY: {intensity_rule}",
             "MANDATORY COLOR SATURATION: strong chromatic presence across costumes, architecture, props, lighting and background. Never grey, never monochrome, never desaturated, never bland beige.",
             "MANDATORY CHARACTER DESIGN: every person wears a funny retrofuturistic costume with exaggerated silhouettes, chrome/plastic accessories, unusual glasses, helmets, geometric panels, absurd gadgets and period-future details.",
             "MANDATORY SET DESIGN: hallucinatory retrofuturist environment, impossible architecture, oversized props related to the news, strange machines, surreal scale, visually dense but readable.",
@@ -341,13 +395,18 @@ def build_image_style_block(director: str, palette: str) -> str:
     )
 
 
-def build_host_image_prompt(host: dict[str, Any], director: str, palette: str) -> str:
+def build_host_image_prompt(
+    host: dict[str, Any],
+    director: str,
+    palette: str,
+    intensity: str = DEFAULT_INTENSITY,
+) -> str:
     return "\n".join(
         [
             "KEYFRAME FOR A COMEDIC TV NEWS SKETCH.",
             f"HOST: {host.get('name', '')} — {host.get('description', '')}",
             f"SET: {host.get('plateau', '')}",
-            build_image_style_block(director, palette),
+            build_image_style_block(director, palette, intensity),
             "The host is the factual anchor of the sketch, composed and deadpan, while a visually absurd retrofuturist mechanism related to the current news is already malfunctioning around the desk.",
             "Create a strong instantly readable vertical composition with exaggerated props and costume details.",
             "Portrait 9:16, rich saturated color, cinematic visual impact.",
@@ -355,7 +414,12 @@ def build_host_image_prompt(host: dict[str, Any], director: str, palette: str) -
     )
 
 
-def build_reporter_image_prompt(segment: dict[str, Any], director: str, palette: str) -> str:
+def build_reporter_image_prompt(
+    segment: dict[str, Any],
+    director: str,
+    palette: str,
+    intensity: str = DEFAULT_INTENSITY,
+) -> str:
     reporter = segment.get("reporter") or {}
     people = segment.get("people") or []
     people_list = " | ".join(
@@ -370,7 +434,7 @@ def build_reporter_image_prompt(segment: dict[str, Any], director: str, palette:
             f"SECONDARY CHARACTERS: {people_list}",
             f"LOCATION: {segment.get('location', '')}",
             f"SCENE ACTION: {segment.get('scene_action', '')}",
-            build_image_style_block(director, palette),
+            build_image_style_block(director, palette, intensity),
             "Compose the exact visual setup of a sketch: the reporter is visibly trapped in or struggling with the news-related gag while every secondary character actively contributes to the escalating situation.",
             "All characters are visible enough to read their funny retrofuturistic costumes and roles.",
             "Portrait 9:16, extremely colorful, visually surprising, cinematic and immediately understandable.",
@@ -384,9 +448,11 @@ def build_host_video_prompt(
     director: str,
     palette: str,
     duration_seconds: float,
+    intensity: str = DEFAULT_INTENSITY,
 ) -> str:
     d = _director(director)
     p = _palette(palette)
+    intensity_rule = _intensity(intensity)
     host = jt.get("host") or {}
     stani = segment.get("stanislavski") or host.get("stanislavski") or {}
     line = str(segment.get("host_dialogue", "")).strip()
@@ -407,9 +473,10 @@ def build_host_video_prompt(
             f"LIGHTING: {d['lighting']}",
             f"FILM: {d['film']}",
             f"PALETTE: {p['full']}",
+            f"CREATIVE INTENSITY: {intensity_rule}",
             "SATURATION: maximum rich color; absolutely no grey/desaturated fallback.",
             "SOUND: no music. Only diegetic foley, mechanical noises, reactions, and birds.",
-            "The host has the same clear natural French voice in every studio segment (S1).",
+            "The host has one consistent natural French broadcast voice (S1): same timbre, apparent age, accent, cadence and vocal energy in every studio segment.",
             f"<d>[French] {line}</d>",
             "No subtitles, no readable text, no watermark, no logo.",
         ]
@@ -421,9 +488,11 @@ def build_reporter_video_prompt(
     director: str,
     palette: str,
     duration_seconds: float,
+    intensity: str = DEFAULT_INTENSITY,
 ) -> str:
     d = _director(director)
     p = _palette(palette)
+    intensity_rule = _intensity(intensity)
     reporter = segment.get("reporter") or {}
     line = str(reporter.get("dialogue", "")).strip()
     people = segment.get("people") or []
@@ -449,6 +518,7 @@ def build_reporter_video_prompt(
             f"LIGHTING: {d['lighting']}",
             f"FILM: {d['film']}",
             f"PALETTE: {p['full']}",
+            f"CREATIVE INTENSITY: {intensity_rule}",
             "SATURATION: maximum rich color on every frame; never grey, monochrome, desaturated or bland.",
             "SOUND: no music. Only diegetic foley, physical comedy sounds, environmental ambience and birds.",
             "The reporter has a clear natural French voice (S1).",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -36,30 +37,40 @@ class AgnesClient:
         self, endpoint: str, payload: dict[str, Any], timeout: int | None = None
     ) -> dict[str, Any]:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(
-            f"{self.base_url}/{endpoint.lstrip('/')}",
-            data=body,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "NewsReel/2.0",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(
-                request, timeout=timeout or self.settings.agnes_timeout_seconds
-            ) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:1200]
-            raise AgnesError(f"Agnes a répondu HTTP {exc.code}: {detail}") from exc
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise AgnesError(f"Appel Agnes impossible: {exc}") from exc
-        if not isinstance(data, dict):
-            raise AgnesError("Réponse Agnes JSON inattendue.")
-        return data
+        target = f"{self.base_url}/{endpoint.lstrip('/')}"
+        attempts = 3
+        last_error: Exception | None = None
+        for attempt in range(attempts):
+            request = urllib.request.Request(
+                target,
+                data=body,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "NewsReel/2.0",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(
+                    request, timeout=timeout or self.settings.agnes_timeout_seconds
+                ) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                if not isinstance(data, dict):
+                    raise AgnesError("Réponse Agnes JSON inattendue.")
+                return data
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")[:1200]
+                last_error = AgnesError(f"Agnes a répondu HTTP {exc.code}: {detail}")
+                if exc.code not in {408, 429, 500, 502, 503, 504} or attempt == attempts - 1:
+                    raise last_error from exc
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last_error = AgnesError(f"Appel Agnes impossible: {exc}")
+                if attempt == attempts - 1:
+                    raise last_error from exc
+            time.sleep(0.75 * (2**attempt))
+        raise AgnesError(f"Appel Agnes impossible: {last_error}")
 
     def write_scenario(
         self,
@@ -69,56 +80,76 @@ class AgnesClient:
         palette: str,
         intensity: str = DEFAULT_INTENSITY,
     ) -> Scenario:
-        prompt = build_scenario_prompt(news, count, director, palette)
-        response = self._request(
-            "chat/completions",
-            {
-                "model": self.settings.agnes_text_model,
-                "temperature": 0.7,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": "Réponds uniquement avec du JSON valide."},
-                    {"role": "user", "content": prompt},
-                ],
-            },
-        )
-        try:
-            content = response["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise AgnesError("Réponse texte Agnes sans choices[0].message.content.") from exc
-        if isinstance(content, list):
-            content = "".join(
-                str(part.get("text", "")) if isinstance(part, dict) else str(part)
-                for part in content
-            )
-        text = str(content).strip()
-        text = re.sub(r"^\`\`\`(?:json)?\s*|\s*\`\`\`$", "", text, flags=re.IGNORECASE)
-        try:
-            raw_value = json.loads(text)
-            if not isinstance(raw_value, dict):
-                raise ValueError("la racine JSON doit être un objet")
-            value = apply_creative_postprocessing(
-                raw_value, count, director=director, palette=palette, intensity=intensity
-            )
-            scenario = Scenario.from_mapping(value)
-        except (json.JSONDecodeError, ValueError, TypeError) as exc:
-            raise AgnesError(
-                f"Le scénario Agnes n'est pas conforme au schéma NewsReel créatif: {exc}"
-            ) from exc
+        if not 1 <= count <= 7:
+            raise AgnesError("Le nombre de sujets doit être compris entre 1 et 7.")
+        prompt = build_scenario_prompt(news, count, director, palette, intensity)
+        available = {item.title: item for item in news if item.title}
+        last_error: Exception | None = None
 
-        for segment in scenario.segments:
-            match = next(
-                (
-                    item
-                    for item in news
-                    if item.title == segment.source_title or item.title == segment.title
-                ),
-                None,
+        for attempt in range(2):
+            correction = ""
+            if last_error is not None:
+                correction = (
+                    "\n\nCORRECTION REQUIRED AFTER INVALID OUTPUT:\n"
+                    f"{last_error}\n"
+                    f"Return a completely valid replacement with EXACTLY {count} distinct segments, "
+                    "each using one exact supplied HEADLINE and no invented factual claim."
+                )
+            response = self._request(
+                "chat/completions",
+                {
+                    "model": self.settings.agnes_text_model,
+                    "temperature": 0.65 if attempt == 0 else 0.35,
+                    "response_format": {"type": "json_object"},
+                    "messages": [
+                        {"role": "system", "content": "Réponds uniquement avec du JSON valide."},
+                        {"role": "user", "content": prompt + correction},
+                    ],
+                },
             )
-            if match:
-                segment.source_title = match.title
-                segment.source_url = match.url
-        return scenario
+            try:
+                content = response["choices"][0]["message"]["content"]
+                if isinstance(content, list):
+                    content = "".join(
+                        str(part.get("text", "")) if isinstance(part, dict) else str(part)
+                        for part in content
+                    )
+                text = str(content).strip()
+                text = re.sub(r"^\`\`\`(?:json)?\s*|\s*\`\`\`$", "", text, flags=re.IGNORECASE)
+                raw_value = json.loads(text)
+                if not isinstance(raw_value, dict):
+                    raise ValueError("la racine JSON doit être un objet")
+                value = apply_creative_postprocessing(
+                    raw_value,
+                    count,
+                    director=director,
+                    palette=palette,
+                    intensity=intensity,
+                )
+                scenario = Scenario.from_mapping(value)
+                seen_titles: set[str] = set()
+                for segment in scenario.segments:
+                    match = available.get(segment.title) or available.get(segment.source_title)
+                    if match is None:
+                        raise ValueError(
+                            f"headline non fourni par Google News: {segment.title!r}"
+                        )
+                    if match.title in seen_titles:
+                        raise ValueError(f"headline dupliqué dans le JT: {match.title!r}")
+                    seen_titles.add(match.title)
+                    segment.title = match.title
+                    segment.source_title = match.title
+                    segment.source_url = match.url
+                    if not segment.summary:
+                        segment.summary = match.summary
+                return scenario
+            except (KeyError, IndexError, TypeError, json.JSONDecodeError, ValueError) as exc:
+                last_error = exc
+
+        raise AgnesError(
+            "Le scénario Agnes reste invalide après une correction automatique: "
+            f"{last_error}"
+        )
 
     def generate_image(self, prompt: str, destination: Path, size: str | None = None) -> Path:
         destination = Path(destination)
