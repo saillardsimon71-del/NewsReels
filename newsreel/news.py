@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -39,32 +40,48 @@ class GoogleNewsRSS:
         url = f"https://news.google.com/rss/search?{params}"
         request = urllib.request.Request(
             url,
-            headers={"User-Agent": "NewsReel/1.0 (+local news bulletin generator)"},
+            headers={"User-Agent": "NewsReel/2.0 (+local news bulletin generator)"},
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                xml = response.read()
-        except (urllib.error.URLError, TimeoutError) as exc:
-            raise NewsProviderError(f"Impossible de récupérer Google News RSS: {exc}") from exc
+        xml: bytes | None = None
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    xml = response.read()
+                break
+            except (urllib.error.URLError, TimeoutError) as exc:
+                last_error = exc
+                if attempt == 2:
+                    break
+                time.sleep(0.5 * (2**attempt))
+        if xml is None:
+            raise NewsProviderError(
+                f"Impossible de récupérer Google News RSS après 3 tentatives: {last_error}"
+            )
         try:
             root = ET.fromstring(xml)
         except ET.ParseError as exc:
             raise NewsProviderError("Google News a renvoyé un flux RSS illisible.") from exc
         items: list[NewsItem] = []
-        for item in root.findall("./channel/item")[:limit]:
+        seen_titles: set[str] = set()
+        for item in root.findall("./channel/item"):
             source_node = item.find("source")
             summary_node = item.find("description")
             news = NewsItem(
                 title=_clean_rss_text(item.findtext("title") or ""),
                 url=(item.findtext("link") or "").strip(),
-                source=(source_node.text or "").strip() if source_node is not None else "",
+                source=_clean_rss_text(source_node.text or "") if source_node is not None else "",
                 published=(item.findtext("pubDate") or "").strip(),
                 summary=_clean_rss_text(summary_node.text or "")
                 if summary_node is not None
                 else "",
             )
-            if news.title and news.url:
+            title_key = news.title.casefold()
+            if news.title and news.url and title_key not in seen_titles:
+                seen_titles.add(title_key)
                 items.append(news)
+            if len(items) >= limit:
+                break
         if not items:
             raise NewsProviderError(
                 "Google News n'a renvoyé aucun article exploitable pour cette recherche."
