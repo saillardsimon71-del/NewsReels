@@ -304,8 +304,11 @@ def _resume_run(
 ) -> None:
     try:
         NewsReelPipeline(settings, store=store).resume(run_id)
-    except Exception:
-        return
+    except Exception as exc:
+        try:
+            store.add_error(run_id, str(exc), "resume")
+        except Exception:
+            pass
 
 
 def _rerender_h3_run(
