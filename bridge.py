@@ -14,7 +14,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
-from newsreel.assembler import FFmpegAssembler
 from newsreel.config import Settings
 from newsreel.creative import (
     DEFAULT_DIRECTOR,
@@ -26,8 +25,7 @@ from newsreel.creative import (
     creative_catalog,
 )
 from newsreel.demo import run_offline_demo
-from newsreel.h3_worker_contract import ModalH3Renderer, create_h3_jobs
-from newsreel.models import Scenario
+from newsreel.h3_worker_contract import ModalH3Renderer
 from newsreel.pipeline import NewsReelPipeline
 from newsreel.run_store import RunStore
 
@@ -139,6 +137,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=409,
                 detail="Client Modal absent. Installez requirements-modal.txt avant tout appel Agnes.",
             )
+        try:
+            ModalH3Renderer(
+                runtime_settings.modal_app_name,
+                runtime_settings.modal_function_name,
+            ).check_available()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Worker Modal indisponible avant génération Agnes: {exc}",
+            ) from exc
         per_run_settings = replace(
             runtime_settings,
             agnes_base_url=(body.agnes_base_url or runtime_settings.agnes_base_url).rstrip("/"),
@@ -181,51 +189,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/render-h3-batch", status_code=202)
     def render_h3_batch(body: RunActionRequest) -> dict[str, Any]:
         try:
-            run_dir = store.path(body.run_id)
+            store.path(body.run_id)
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        scenario_path = run_dir / "scenario.json"
-        if not scenario_path.is_file():
-            raise HTTPException(status_code=409, detail="scenario.json absent pour ce run.")
-        try:
-            scenario = Scenario.from_mapping(json.loads(scenario_path.read_text(encoding="utf-8")))
-        except (ValueError, OSError) as exc:
-            raise HTTPException(status_code=422, detail=f"Scénario invalide: {exc}") from exc
-
-        host_image = run_dir / "images" / "host-plate.png"
-        reporter_images = [
-            run_dir / "images" / f"reporter-{index}.png"
-            for index in range(len(scenario.segments))
-        ]
-        missing = [str(path) for path in [host_image, *reporter_images] if not path.is_file()]
-        if missing:
-            raise HTTPException(status_code=409, detail=f"Keyframes H3 manquantes: {missing}")
-        executor.submit(
-            _render_h3_run,
-            runtime_settings,
-            store,
-            body.run_id,
-            scenario,
-            host_image,
-            reporter_images,
-        )
+        executor.submit(_rerender_h3_run, runtime_settings, store, body.run_id)
         return {
             "run_id": body.run_id,
             "status": "queued",
-            "message": "Batch full-H3 soumis une seule fois.",
+            "message": "Relance full-H3 puis remontage final soumis.",
         }
 
     @app.post("/assemble", status_code=202)
     def assemble_run(body: RunActionRequest) -> dict[str, Any]:
         try:
-            run_dir = store.path(body.run_id)
+            store.path(body.run_id)
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        timeline_path = run_dir / "timeline.json"
-        if not timeline_path.is_file():
-            raise HTTPException(status_code=409, detail="timeline.json absent pour ce run.")
-        executor.submit(_assemble_run, runtime_settings, store, body.run_id)
-        return {"run_id": body.run_id, "status": "queued", "message": "Montage local démarré."}
+        executor.submit(_reassemble_run, runtime_settings, store, body.run_id)
+        return {
+            "run_id": body.run_id,
+            "status": "queued",
+            "message": "Timeline reconstruite depuis les clips H3 puis montage local démarré.",
+        }
 
     @app.get("/run/{run_id}")
     @app.get("/runs/{run_id}")
@@ -297,65 +282,26 @@ def _run_demo(settings: Settings, store: RunStore, run_id: str) -> None:
         return
 
 
-def _render_h3_run(
+def _rerender_h3_run(
     settings: Settings,
     store: RunStore,
     run_id: str,
-    scenario: Scenario,
-    host_image: Path,
-    reporter_images: list[Path],
 ) -> None:
-    run_dir = store.path(run_id)
-    store.stage(run_id, "h3", "running")
     try:
-        jobs = create_h3_jobs(scenario, host_image, reporter_images, settings)
-        store.stage(run_id, "h3", "running", clip_count=len(jobs))
-        result = ModalH3Renderer(
-            settings.modal_app_name, settings.modal_function_name
-        ).render_batch(jobs, run_id=run_id)
-        for job in jobs:
-            path = run_dir / "h3" / f"{job.id}.mp4"
-            path.write_bytes(result.videos[job.id])
-            store.register_file(run_id, path)
-        store.stage(
-            run_id,
-            "h3",
-            "succeeded",
-            clip_count=len(jobs),
-            generation_seconds=result.generation_seconds,
-        )
-    except Exception as exc:
-        store.stage(run_id, "h3", "failed", message=str(exc))
-        store.add_error(run_id, str(exc), "h3")
+        NewsReelPipeline(settings, store=store).rerender_h3(run_id)
+    except Exception:
+        return
 
 
-def _assemble_run(settings: Settings, store: RunStore, run_id: str) -> None:
-    run_dir = store.path(run_id)
-    store.stage(run_id, "assembly", "running")
+def _reassemble_run(
+    settings: Settings,
+    store: RunStore,
+    run_id: str,
+) -> None:
     try:
-        result = FFmpegAssembler(settings).assemble(run_dir / "timeline.json", run_dir)
-        path = Path(result["path"])
-        store.register_file(run_id, path)
-        for relative in result["segment_files"]:
-            store.register_file(run_id, run_dir / relative)
-        store.stage(
-            run_id,
-            "assembly",
-            "succeeded",
-            final_duration_seconds=result["duration_seconds"],
-            resolution=f"{result['width']}x{result['height']}",
-            fps=result["fps"],
-            audio=result["audio"],
-        )
-        store.update(
-            run_id,
-            status="complete",
-            final_file=path.name,
-            final_duration_seconds=result["duration_seconds"],
-        )
-    except Exception as exc:
-        store.stage(run_id, "assembly", "failed", message=str(exc))
-        store.add_error(run_id, str(exc), "assembly")
+        NewsReelPipeline(settings, store=store).reassemble(run_id)
+    except Exception:
+        return
 
 
 app = create_app()
