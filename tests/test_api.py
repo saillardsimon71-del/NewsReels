@@ -28,8 +28,10 @@ def test_local_endpoints_and_explicit_missing_credentials(tmp_path: Path, monkey
                 health = await client.get("/health")
                 assert health.status_code == 200
                 assert health.json()["service"] == "newsreel-local-bridge"
+                assert health.json()["version"] == "2"
                 assert health.json()["h3_graph_built_in"] is True
                 assert (await client.get("/")).status_code == 200
+
                 config = (await client.get("/config")).json()
                 assert config["width"] == 1080
                 assert config["height"] == 1920
@@ -37,12 +39,29 @@ def test_local_endpoints_and_explicit_missing_credentials(tmp_path: Path, monkey
                 assert config["agnes_image_model"] == "agnes-image-2.5-flash"
                 assert config["agnes_image_size"] == "1K"
                 assert config["agnes_image_ratio"] == "9:16"
+                assert config["full_h3"] is True
+                assert config["h3_clips_per_subject"] == 2
+                assert len(config["creative"]["directors"]) == 25
+                assert len(config["creative"]["palettes"]) == 16
+
                 assert (await client.get("/run/absent")).status_code == 404
                 missing_key = await client.post(
                     "/runs", json={"query": "actualité France", "count": 3}
                 )
                 assert missing_key.status_code == 400
                 assert "Agnes" in missing_key.json()["detail"]
+
+                invalid_style = await client.post(
+                    "/runs",
+                    json={
+                        "query": "actualité France",
+                        "count": 3,
+                        "agnes_api_key": "not-a-real-key",
+                        "director": "unknown",
+                    },
+                )
+                assert invalid_style.status_code == 422
+
                 blocked_before_agnes = await client.post(
                     "/runs",
                     json={

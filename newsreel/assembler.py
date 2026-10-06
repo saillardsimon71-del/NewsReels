@@ -36,7 +36,9 @@ def _font_path(size: int, bold: bool) -> Any:
         return ImageFont.load_default()
 
 
-def _wrap_text(draw: Any, text: str, font: Any, max_width: int) -> list[str]:
+def _wrap_text(
+    draw: Any, text: str, font: Any, max_width: int, max_lines: int = 2
+) -> list[str]:
     words = text.split()
     lines: list[str] = []
     current = ""
@@ -49,7 +51,7 @@ def _wrap_text(draw: Any, text: str, font: Any, max_width: int) -> list[str]:
             current = test
     if current:
         lines.append(current)
-    return lines[:3]
+    return lines[:max_lines]
 
 
 def _render_overlay(path: Path, scene: Scene, width: int, height: int) -> None:
@@ -60,34 +62,69 @@ def _render_overlay(path: Path, scene: Scene, width: int, height: int) -> None:
         overlay.save(path)
         return
     draw = ImageDraw.Draw(overlay)
-    panel_top = round(height * 0.735)
+
+    if scene.id in {"intro", "outro"}:
+        title_font = _font_path(round(width * 0.09), bold=True)
+        kicker_font = _font_path(round(width * 0.031), bold=True)
+        title = scene.title.upper()
+        kicker = scene.kicker.upper()
+        title_box = draw.textbbox((0, 0), title, font=title_font)
+        title_w = title_box[2] - title_box[0]
+        y = round(height * 0.43)
+        x = max(round(width * 0.06), (width - title_w) // 2)
+        draw.rounded_rectangle(
+            (
+                round(width * 0.10),
+                y - round(height * 0.035),
+                round(width * 0.90),
+                y + round(height * 0.14),
+            ),
+            radius=28,
+            fill=(3, 10, 18, 178),
+        )
+        draw.text((x + 3, y + 4), title, font=title_font, fill=(0, 0, 0, 125))
+        draw.text((x, y), title, font=title_font, fill=(255, 255, 255, 255))
+        if kicker:
+            kicker_box = draw.textbbox((0, 0), kicker, font=kicker_font)
+            kicker_w = kicker_box[2] - kicker_box[0]
+            draw.text(
+                ((width - kicker_w) // 2, y + round(height * 0.09)),
+                kicker,
+                font=kicker_font,
+                fill=(78, 222, 225, 255),
+            )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        overlay.save(path)
+        return
+
     margin = round(width * 0.055)
     panel_left = margin
     panel_right = width - margin
     panel_bottom = height - round(height * 0.045)
+    panel_top = round(height * 0.79)
     draw.rounded_rectangle(
         (panel_left, panel_top, panel_right, panel_bottom),
-        radius=24,
-        fill=(6, 18, 34, 220),
+        radius=22,
+        fill=(6, 18, 34, 210),
     )
-    accent_w = max(10, round(width * 0.012))
+    accent_w = max(8, round(width * 0.010))
     draw.rounded_rectangle(
         (panel_left, panel_top, panel_left + accent_w * 2, panel_bottom),
-        radius=6,
+        radius=5,
         fill=(39, 207, 215, 255),
     )
-    text_left = panel_left + round(width * 0.045)
-    max_width = panel_right - text_left - round(width * 0.04)
-    kicker_font = _font_path(round(width * 0.025), bold=True)
-    title_font = _font_path(round(width * 0.052), bold=True)
-    y = panel_top + round(height * 0.032)
+    text_left = panel_left + round(width * 0.040)
+    max_width = panel_right - text_left - round(width * 0.035)
+    kicker_font = _font_path(round(width * 0.022), bold=True)
+    title_font = _font_path(round(width * 0.042), bold=True)
+    y = panel_top + round(height * 0.022)
     kicker = scene.kicker.upper()
     if kicker:
         draw.text((text_left, y), kicker, font=kicker_font, fill=(78, 222, 225, 255))
-        y += round(height * 0.064)
-    for line in _wrap_text(draw, scene.title, title_font, max_width):
+        y += round(height * 0.048)
+    for line in _wrap_text(draw, scene.title, title_font, max_width, max_lines=2):
         draw.text((text_left, y), line, font=title_font, fill=(255, 255, 255, 255))
-        y += round(height * 0.073)
+        y += round(height * 0.055)
     path.parent.mkdir(parents=True, exist_ok=True)
     overlay.save(path)
 

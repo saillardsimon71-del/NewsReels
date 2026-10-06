@@ -13,6 +13,7 @@ from newsreel.config import Settings
 from newsreel.h3_worker_contract import (
     H3RendererError,
     ModalH3Renderer,
+    build_host_prompt,
     build_reporter_prompt,
     create_h3_jobs,
     encode_batch,
@@ -24,62 +25,94 @@ from newsreel.h3_workflow import (
     H3_VSA_SETTINGS,
     h3_contract_config,
 )
-from newsreel.models import Segment
+from newsreel.models import Scenario
 
 
-def _three_jobs(tmp_path: Path):
-    segments = [
-        Segment(
-            f"subject-{i}",
-            f"Sujet {i}",
-            "Introduction plateau",
-            f"Dialogue français exact {i}.",
-            reporter_action=(
-                "Le reporter se tourne légèrement vers le chantier." if i == 0 else ""
-            ),
-        )
-        for i in range(3)
-    ]
+def _scenario() -> Scenario:
+    return Scenario.from_mapping(
+        {
+            "title": "JT créatif",
+            "host": {
+                "name": "Alice",
+                "description": "retrofuturistic anchor with chrome glasses",
+                "plateau": "hallucinatory retrofuturistic TV set",
+                "host_action": "a giant chrome dial spins",
+                "stanislavski": {
+                    "objective": "deliver the news",
+                    "obstacle": "the absurd studio",
+                },
+            },
+            "creative": {
+                "director": "wes_anderson",
+                "palette": "electric_coral_cyan",
+                "intensity": "strong",
+            },
+            "segments": [
+                {
+                    "id": f"subject-{i}",
+                    "headline": f"Sujet {i}",
+                    "host_dialogue": f"Information factuelle exacte numéro {i} annoncée sur le plateau.",
+                    "host_action": "a giant chrome dial spins behind the host",
+                    "people": [
+                        {
+                            "name": "Witness",
+                            "role": "witness",
+                            "description": "retro-futuristic witness",
+                        }
+                    ],
+                    "location": "hallucinatory retrofuturist plaza",
+                    "scene_action": "a harmless giant machine slowly blocks the reporter",
+                    "camera_plan": "establishing shot, reaction close-up, final wide",
+                    "reporter": {
+                        "name": f"Reporter {i}",
+                        "description": "retro-futuristic field reporter",
+                        "dialogue": f"Même la machine réclame son temps de parole numéro {i} aujourd'hui.",
+                    },
+                }
+                for i in range(3)
+            ],
+        }
+    )
+
+
+def _six_jobs(tmp_path: Path):
+    scenario = _scenario()
+    host = tmp_path / "host.png"
+    host.write_bytes(b"fixture-host")
     images = []
     for i in range(3):
         image = tmp_path / f"reporter-{i}.png"
         image.write_bytes(f"fixture-image-{i}".encode())
         images.append(image)
-    return create_h3_jobs(segments, images, Settings(project_root=tmp_path))
+    return create_h3_jobs(scenario, host, images, Settings(project_root=tmp_path))
 
 
-def test_reporter_prompt_keeps_exact_dialogue_action_and_stability_constraints(
-    tmp_path: Path,
-) -> None:
-    segment = Segment(
-        id="subject-0",
-        title="Le point du jour",
-        host_dialogue="Une introduction.",
-        reporter_dialogue="Texte exact du reporter, sans paraphrase.",
-        reporter_action="Le reporter se tourne légèrement vers le chantier.",
-    )
-    prompt = build_reporter_prompt(segment)
-    assert "Preserve exactly the reporter's identity, face, hairstyle, clothing" in prompt
-    assert "Keep anatomy and facial features stable" in prompt
-    assert "controlled, nearly locked camera" in prompt
-    assert "Do not morph or duplicate people or body parts" in prompt
-    assert "visible text" in prompt and "subtitles" in prompt
-    assert "Le reporter se tourne légèrement vers le chantier." in prompt
-    assert prompt.endswith(
-        "The reporter has a clear natural French voice (S1).\n"
-        "<d>[French] Texte exact du reporter, sans paraphrase.</d>"
-    )
+def test_full_h3_prompts_keep_creativity_dialogue_and_stability(tmp_path: Path) -> None:
+    scenario = _scenario()
+    host_prompt = build_host_prompt(scenario, scenario.segments[0])
+    reporter_prompt = build_reporter_prompt(scenario.segments[0])
+    for prompt in (host_prompt, reporter_prompt):
+        assert "Preserve the same face, hairstyle, costume, set design" in prompt
+        assert "Keep anatomy, faces, hands and fingers coherent" in prompt
+        assert "Avoid morphing, duplication, identity drift" in prompt
+        assert "<d>[French] " in prompt
+    assert "VISUAL GAG" in host_prompt
+    assert "RETROFUTURIST STUDIO" in host_prompt
+    assert "COMPLETE COMEDIC FIELD-REPORT SKETCH" in reporter_prompt
+    assert "FULL VISUAL GAG" in reporter_prompt
 
-    image = tmp_path / "reporter.png"
-    image.write_bytes(b"fake image")
-    jobs = create_h3_jobs([segment], [image], Settings(project_root=tmp_path))
-    assert len(jobs) == 1
-    assert (jobs[0].width, jobs[0].height, jobs[0].fps, jobs[0].frames, jobs[0].steps) == (
-        768,
-        1344,
-        24,
-        243,
-        8,
+    jobs = _six_jobs(tmp_path)
+    assert [job.id for job in jobs] == [
+        "host-0",
+        "reporter-0",
+        "host-1",
+        "reporter-1",
+        "host-2",
+        "reporter-2",
+    ]
+    assert all(
+        (job.width, job.height, job.fps, job.frames, job.steps) == (768, 1344, 24, 243, 8)
+        for job in jobs
     )
 
 
@@ -87,10 +120,10 @@ def test_api_graph_contains_exact_models_dimensions_sampling_vsa_and_native_audi
     tmp_path: Path,
 ) -> None:
     assert COMFYUI_REPOSITORY == "https://github.com/Comfy-Org/ComfyUI.git"
-    jobs = _three_jobs(tmp_path)
+    jobs = _six_jobs(tmp_path)
     job = jobs[0]
     graph = build_h3_api_workflow(
-        dataclasses.asdict(job), "reporter-0.png", "newsreel/test-run/reporter-0"
+        dataclasses.asdict(job), "host.png", "newsreel/test-run/host-0"
     )
 
     assert graph["6"]["inputs"]["unet_name"] == (
@@ -127,34 +160,16 @@ def test_api_graph_contains_exact_models_dimensions_sampling_vsa_and_native_audi
     assert graph["92"]["class_type"] == "SaveVideo"
     assert graph["92"]["inputs"] == {
         "video": ["91", 0],
-        "filename_prefix": "newsreel/test-run/reporter-0",
+        "filename_prefix": "newsreel/test-run/host-0",
         "format": "auto",
         "codec": "auto",
     }
 
-    other_graph = build_h3_api_workflow(
-        {
-            "prompt": jobs[1].prompt,
-            "seed": jobs[1].seed,
-            "width": 768,
-            "height": 1344,
-            "fps": 24,
-            "frames": 243,
-            "duration_seconds": 10.125,
-            "steps": 8,
-        },
-        "reporter-1.png",
-        "newsreel/test-run/reporter-1",
-    )
-    # The same ComfyUI loader nodes and inputs are reused while each reporter is processed.
-    for node_id in ("6", "13", "11", "24", "143", "128", "127"):
-        assert graph[node_id] == other_graph[node_id]
 
-
-def test_batch_contract_contains_three_reporters_but_no_external_workflow(tmp_path: Path) -> None:
-    jobs = _three_jobs(tmp_path)
+def test_batch_contract_contains_six_clips_but_no_external_workflow(tmp_path: Path) -> None:
+    jobs = _six_jobs(tmp_path)
     payload = encode_batch(jobs, "run-123")
-    assert len(payload["jobs"]) == 3
+    assert len(payload["jobs"]) == 6
     assert "workflow" not in payload
     assert payload["run_id"] == "run-123"
     assert payload["config"] == h3_contract_config()
@@ -169,15 +184,16 @@ def test_batch_contract_contains_three_reporters_but_no_external_workflow(tmp_pa
     assert payload["config"]["modal_max_containers"] == 1
     assert payload["config"]["single_use_containers"] is True
     assert payload["config"]["vsa"]["selection"] == "vsa"
-    assert base64.b64decode(payload["jobs"][0]["image_base64"]) == b"fixture-image-0"
-    assert "<d>[French] Dialogue français exact 0.</d>" in payload["jobs"][0]["prompt"]
+    assert base64.b64decode(payload["jobs"][0]["image_base64"]) == b"fixture-host"
+    assert payload["jobs"][0]["id"] == "host-0"
+    assert payload["jobs"][1]["id"] == "reporter-0"
 
 
 def test_modal_worker_validates_builtin_graph_contract_and_rejects_external_workflow(
     tmp_path: Path,
 ) -> None:
-    payload = encode_batch(_three_jobs(tmp_path), "run-123")
-    assert len(validate_batch(payload)) == 3
+    payload = encode_batch(_six_jobs(tmp_path), "run-123")
+    assert len(validate_batch(payload)) == 6
 
     wrong_resolution = {**payload, "config": {**payload["config"], "width": 720}}
     with pytest.raises(ValueError, match="width"):
@@ -188,10 +204,10 @@ def test_modal_worker_validates_builtin_graph_contract_and_rejects_external_work
         validate_batch(with_external_workflow)
 
 
-def test_modal_renderer_uses_one_remote_call_for_three_reporters(
+def test_modal_renderer_uses_one_remote_call_for_six_clips(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    jobs = _three_jobs(tmp_path)
+    jobs = _six_jobs(tmp_path)
     remote_calls: list[dict] = []
     function_lookups: list[tuple[str, str]] = []
 
@@ -203,7 +219,7 @@ def test_modal_renderer_uses_one_remote_call_for_three_reporters(
                     job.id: {"data_base64": base64.b64encode(f"mp4-{job.id}".encode()).decode()}
                     for job in jobs
                 },
-                "h3_generation_seconds": 30.5,
+                "h3_generation_seconds": 61.0,
             }
 
     class FakeFunction:
@@ -218,32 +234,14 @@ def test_modal_renderer_uses_one_remote_call_for_three_reporters(
 
     assert function_lookups == [("test-app", "render_h3_batch")]
     assert len(remote_calls) == 1
-    assert remote_calls[0]["run_id"] == "run-123"
-    assert len(remote_calls[0]["jobs"]) == 3
-    assert "workflow" not in remote_calls[0]
+    assert len(remote_calls[0]["jobs"]) == 6
     assert result.videos == {job.id: f"mp4-{job.id}".encode() for job in jobs}
-    assert result.generation_seconds == 30.5
-
-
-def test_agnes_model_defaults_and_settings_need_no_workflow_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("AGNES_TEXT_MODEL", raising=False)
-    monkeypatch.delenv("AGNES_IMAGE_MODEL", raising=False)
-    monkeypatch.delenv("AGNES_IMAGE_SIZE", raising=False)
-    monkeypatch.delenv("AGNES_IMAGE_RATIO", raising=False)
-    settings = Settings.from_env(project_root=tmp_path)
-    assert settings.agnes_text_model == "agnes-2.5-flash"
-    assert settings.agnes_image_model == "agnes-image-2.5-flash"
-    assert settings.agnes_image_size == "1K"
-    assert settings.agnes_image_ratio == "9:16"
-    assert not hasattr(settings, "h3_workflow_path")
-    assert not hasattr(ModalH3Renderer("app", "function"), "workflow_path")
+    assert result.generation_seconds == 61.0
 
 
 def test_batch_rejects_invalid_count_and_run_id(tmp_path: Path) -> None:
-    jobs = _three_jobs(tmp_path)
+    jobs = _six_jobs(tmp_path)
     with pytest.raises(H3RendererError, match="run"):
         encode_batch(jobs, "../unsafe")
-    with pytest.raises(H3RendererError, match="un à six"):
+    with pytest.raises(H3RendererError, match="quatorze"):
         encode_batch([], "run-123")

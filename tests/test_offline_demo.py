@@ -25,21 +25,21 @@ def test_full_offline_fixture_to_final_mp4(tmp_path: Path) -> None:
     run_dir = settings.output_dir / "offline-test"
     final_path = run_dir / "newsreel_final.mp4"
     assert manifest["status"] == "complete"
-    assert manifest["h3_clip_count"] == 3
+    assert manifest["h3_clip_count"] == 6
     assert final_path.is_file() and final_path.stat().st_size > 10_000
     assert (run_dir / "scenario.json").is_file()
     assert (run_dir / "timeline.json").is_file()
     assert (run_dir / "run_manifest.json").is_file()
-    assert len(list((run_dir / "h3").glob("*.mp4"))) == 3
+    assert len(list((run_dir / "h3").glob("*.mp4"))) == 6
     assert len(list((run_dir / "segments").glob("*.mp4"))) == 8
     assert len([item for item in manifest["files"] if item.startswith("segments/")]) == 8
     assert manifest["errors"] == []
-    assert manifest["h3_generation_seconds"] is None  # Synthetic fixture, not a GPU measurement.
+    assert manifest["h3_generation_seconds"] is None
     info = probe_media(final_path, settings)
     assert info.video and info.audio
     assert (info.width, info.height) == (1080, 1920)
     assert info.fps == pytest.approx(24, abs=0.05)
-    assert 45 <= info.duration <= 60
+    assert 63 <= info.duration <= 65
     assert manifest["stages"]["assembly"]["status"] == "succeeded"
 
 
