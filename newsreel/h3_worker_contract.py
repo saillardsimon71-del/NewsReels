@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
+from .creative import (
+    DEFAULT_DIRECTOR,
+    DEFAULT_PALETTE,
+    build_host_video_prompt,
+    build_reporter_video_prompt,
+)
 from .h3_workflow import (
     H3_DURATION_SECONDS,
     H3_FPS,
@@ -18,7 +24,7 @@ from .h3_workflow import (
     H3_WIDTH,
     h3_contract_config,
 )
-from .models import Segment
+from .models import Scenario, Segment
 
 
 @dataclass(slots=True)
@@ -47,53 +53,101 @@ class H3BatchResult:
     generation_seconds: float | None = None
 
 
-def build_reporter_prompt(segment: Segment) -> str:
-    spoken_text = segment.reporter_dialogue.strip()
-    if not spoken_text:
-        raise ValueError(f"Le dialogue du reporter {segment.id} est vide.")
-
-    context_action = " ".join(segment.reporter_action.split())
-    if context_action:
-        action_instruction = (
-            "Subtle contextual action from Agnes: "
-            f"{context_action} Perform it once, gently, and only if it remains natural "
-            "for the supplied frame."
-        )
-    else:
-        action_instruction = (
-            "No additional action is needed: the reporter may make one small, natural "
-            "facial expression or restrained hand gesture while speaking."
-        )
-
+def _stability_block(role: str) -> str:
     return "\n".join(
-        (
-            "Create one continuous, photorealistic French TV-news reporter shot from the supplied first frame, lasting 10.125 seconds.",
-            "Preserve exactly the reporter's identity, face, hairstyle, clothing, framing, lighting, and location from the Agnes image.",
-            "Keep anatomy and facial features stable from frame to frame; hands and fingers must remain coherent and natural.",
-            "Use measured, believable body movement and a controlled, nearly locked camera; preserve temporal continuity.",
-            "Do not morph or duplicate people or body parts, change the set, add cuts, or introduce unrelated action.",
-            "Do not add visible text, lower thirds, logos, graphics, or subtitles.",
-            action_instruction,
-            "The reporter has a clear natural French voice (S1).",
-            f"<d>[French] {spoken_text}</d>",
-        )
+        [
+            f"Use the supplied first frame as the exact visual identity reference for this {role} shot.",
+            "Preserve the same face, hairstyle, costume, set design, color palette and overall composition from the Agnes keyframe.",
+            "Keep anatomy, faces, hands and fingers coherent from frame to frame; preserve every character's identity.",
+            "Motion must remain physically coherent even when the visual gag is absurd. Avoid morphing, duplication, identity drift or sudden set replacement.",
+            "Keep camera movement controlled enough to protect facial consistency and lip sync.",
+        ]
     )
 
 
-def create_h3_jobs(segments: list[Segment], images: list[Path], settings: Settings) -> list[H3Job]:
-    if len(segments) != len(images):
+def build_host_prompt(
+    scenario: Scenario,
+    segment: Segment,
+    director: str = DEFAULT_DIRECTOR,
+    palette: str = DEFAULT_PALETTE,
+) -> str:
+    spoken_text = segment.host_dialogue.strip()
+    if not spoken_text:
+        raise ValueError(f"Le dialogue host {segment.id} est vide.")
+    creative = build_host_video_prompt(
+        scenario.to_dict(),
+        segment.to_dict(),
+        director,
+        palette,
+        H3_DURATION_SECONDS,
+    )
+    return creative + "\n" + _stability_block("studio host")
+
+
+def build_reporter_prompt(
+    segment: Segment,
+    director: str = DEFAULT_DIRECTOR,
+    palette: str = DEFAULT_PALETTE,
+) -> str:
+    spoken_text = segment.reporter_dialogue.strip()
+    if not spoken_text:
+        raise ValueError(f"Le dialogue du reporter {segment.id} est vide.")
+    creative = build_reporter_video_prompt(
+        segment.to_dict(),
+        director,
+        palette,
+        H3_DURATION_SECONDS,
+    )
+    return creative + "\n" + _stability_block("field reporter")
+
+
+def create_h3_jobs(
+    scenario: Scenario,
+    host_image: Path,
+    reporter_images: list[Path],
+    settings: Settings,
+    director: str | None = None,
+    palette: str | None = None,
+) -> list[H3Job]:
+    if len(scenario.segments) != len(reporter_images):
         raise ValueError("Une image Agnes est requise pour chaque reporter H3.")
-    jobs = []
-    for index, (segment, image) in enumerate(zip(segments, images, strict=True)):
-        if not image.is_file():
-            raise FileNotFoundError(f"Image H3 introuvable: {image}")
+    if not host_image.is_file():
+        raise FileNotFoundError(f"Image host H3 introuvable: {host_image}")
+    selected_director = director or scenario.creative.get("director") or DEFAULT_DIRECTOR
+    selected_palette = palette or scenario.creative.get("palette") or DEFAULT_PALETTE
+
+    jobs: list[H3Job] = []
+    for index, (segment, reporter_image) in enumerate(
+        zip(scenario.segments, reporter_images, strict=True)
+    ):
+        if not reporter_image.is_file():
+            raise FileNotFoundError(f"Image H3 introuvable: {reporter_image}")
+        jobs.append(
+            H3Job(
+                id=f"host-{index}",
+                title=segment.title,
+                image_path=host_image,
+                dialogue=segment.host_dialogue,
+                prompt=build_host_prompt(
+                    scenario, segment, selected_director, selected_palette
+                ),
+                duration_seconds=settings.h3_duration_seconds,
+                width=settings.h3_width,
+                height=settings.h3_height,
+                fps=settings.h3_fps,
+                frames=H3_FRAMES,
+                steps=settings.h3_steps,
+            )
+        )
         jobs.append(
             H3Job(
                 id=f"reporter-{index}",
                 title=segment.title,
-                image_path=image,
+                image_path=reporter_image,
                 dialogue=segment.reporter_dialogue,
-                prompt=build_reporter_prompt(segment),
+                prompt=build_reporter_prompt(
+                    segment, selected_director, selected_palette
+                ),
                 duration_seconds=settings.h3_duration_seconds,
                 width=settings.h3_width,
                 height=settings.h3_height,
@@ -124,10 +178,8 @@ def encode_job(job: H3Job) -> dict[str, Any]:
 
 
 def encode_batch(jobs: list[H3Job], run_id: str) -> dict[str, Any]:
-    if not 1 <= len(jobs) <= 6:
-        raise H3RendererError(
-            "NewsReel V1 accepte de un à six sujets par batch (trois par défaut)."
-        )
+    if not 1 <= len(jobs) <= 14:
+        raise H3RendererError("NewsReel accepte de un à quatorze clips par batch FastH3.")
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", run_id):
         raise H3RendererError("Identifiant de run invalide pour le batch FastH3.")
     return {
@@ -140,7 +192,7 @@ def encode_batch(jobs: list[H3Job], run_id: str) -> dict[str, Any]:
 
 
 class ModalH3Renderer:
-    """One Modal call for the full reporter batch; never one call per clip."""
+    """One Modal call for all host + reporter clips in a JT."""
 
     def __init__(self, app_name: str, function_name: str):
         self.app_name = app_name

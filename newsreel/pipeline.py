@@ -7,12 +7,19 @@ from typing import Protocol
 from .agnes import AgnesClient
 from .assembler import FFmpegAssembler
 from .config import Settings
+from .creative import (
+    DEFAULT_DIRECTOR,
+    DEFAULT_INTENSITY,
+    DEFAULT_PALETTE,
+    build_host_image_prompt,
+    build_reporter_image_prompt,
+)
 from .h3_worker_contract import H3BatchResult, H3Job, ModalH3Renderer, create_h3_jobs
+from .media import probe_media
 from .models import NewsItem, Scenario
 from .news import GoogleNewsRSS
 from .run_store import RunStore
 from .timeline import build_timeline
-from .tts import EdgeTTSProvider, TTSProvider
 
 
 class H3Renderer(Protocol):
@@ -27,14 +34,12 @@ class NewsReelPipeline:
         settings: Settings,
         store: RunStore | None = None,
         news_provider: GoogleNewsRSS | None = None,
-        tts_provider: TTSProvider | None = None,
         h3_renderer: H3Renderer | None = None,
         assembler: FFmpegAssembler | None = None,
     ):
         self.settings = settings
         self.store = store or RunStore(settings.output_dir or settings.project_root / "output")
         self.news_provider = news_provider or GoogleNewsRSS()
-        self.tts_provider = tts_provider or EdgeTTSProvider(settings)
         self.h3_renderer = h3_renderer or ModalH3Renderer(
             settings.modal_app_name, settings.modal_function_name
         )
@@ -46,11 +51,24 @@ class NewsReelPipeline:
         query: str,
         count: int,
         agnes_api_key: str,
+        director: str = DEFAULT_DIRECTOR,
+        palette: str = DEFAULT_PALETTE,
+        intensity: str = DEFAULT_INTENSITY,
     ) -> dict[str, object]:
         run_dir = self.store.path(run_id)
         active_stage = "news"
         try:
-            self.store.update(run_id, status="running", query=query, requested_subject_count=count)
+            self.store.update(
+                run_id,
+                status="running",
+                query=query,
+                requested_subject_count=count,
+                creative={
+                    "director": director,
+                    "palette": palette,
+                    "intensity": intensity,
+                },
+            )
             self.store.stage(
                 run_id, active_stage, "running", message="Récupération du flux Google News"
             )
@@ -63,9 +81,27 @@ class NewsReelPipeline:
             self.store.stage(run_id, active_stage, "succeeded", article_count=len(news))
 
             active_stage = "scenario"
-            self.store.stage(run_id, active_stage, "running", message="Écriture du scénario Agnes")
+            self.store.stage(
+                run_id,
+                active_stage,
+                "running",
+                message="Écriture du scénario satirique et direction artistique Agnes",
+            )
             agnes = AgnesClient(self.settings, agnes_api_key)
-            scenario = agnes.write_scenario(news, count)
+            scenario = agnes.write_scenario(
+                news,
+                count,
+                director=director,
+                palette=palette,
+                intensity=intensity,
+            )
+            scenario.host_image_prompt = build_host_image_prompt(
+                scenario.host_dict(), director, palette
+            )
+            for segment in scenario.segments:
+                segment.reporter_image_prompt = build_reporter_image_prompt(
+                    segment.to_dict(), director, palette
+                )
             scenario_path = run_dir / "scenario.json"
             RunStore.atomic_write_json(scenario_path, scenario.to_dict())
             self.store.register_file(run_id, scenario_path)
@@ -74,102 +110,113 @@ class NewsReelPipeline:
                 active_stage,
                 "succeeded",
                 subject_count=len(scenario.segments),
-                message="Scénario structuré validé",
+                message="Scénario créatif structuré validé",
             )
 
             active_stage = "images"
-            self.store.stage(run_id, active_stage, "running", message="Génération des images Agnes")
+            self.store.stage(
+                run_id,
+                active_stage,
+                "running",
+                message="Génération des keyframes créatives Agnes",
+            )
             host_plate = agnes.generate_image(
                 scenario.host_image_prompt, run_dir / "images" / "host-plate.png"
             )
             self.store.register_file(run_id, host_plate)
             reporter_images: list[Path] = []
             for index, segment in enumerate(scenario.segments):
-                prompt = segment.reporter_image_prompt or (
-                    "Photorealistic vertical French television field-reporter news image, "
-                    f"editorial setting related to this verified story: {segment.title}. "
-                    "One calm reporter looking into the camera, documentary lighting, "
-                    "realistic face and hands, no text, no captions, no logos."
-                )
                 image_path = agnes.generate_image(
-                    prompt, run_dir / "images" / f"reporter-{index}.png"
+                    segment.reporter_image_prompt,
+                    run_dir / "images" / f"reporter-{index}.png",
                 )
                 reporter_images.append(image_path)
                 self.store.register_file(run_id, image_path)
-            audio_paths: list[Path] = []
-            audio_durations: list[float] = []
-            for index, segment in enumerate(scenario.segments):
-                audio_path = run_dir / "audio" / f"host-{index}.mp3"
-                # segment.host_dialogue is passed unchanged to TTS by design.
-                duration = self.tts_provider.synthesize(
-                    segment.host_dialogue, audio_path, self.settings.tts_voice
-                )
-                if duration <= 0:
-                    raise RuntimeError(f"Le TTS n'a produit aucune durée audio pour host-{index}.")
-                audio_paths.append(audio_path)
-                audio_durations.append(duration)
-                self.store.register_file(run_id, audio_path)
             self.store.stage(
                 run_id,
                 active_stage,
                 "succeeded",
                 image_count=1 + len(reporter_images),
-                host_audio_count=len(audio_paths),
+                host_audio_count=0,
+                message="Keyframes host + reporters générées",
             )
 
             active_stage = "h3"
+            jobs = create_h3_jobs(
+                scenario,
+                host_plate,
+                reporter_images,
+                self.settings,
+                director=director,
+                palette=palette,
+            )
             self.store.stage(
                 run_id,
                 active_stage,
                 "running",
-                message=f"Rendu FastH3 batch de {len(scenario.segments)} reporter(s) sur un seul worker Modal",
-                clip_count=len(scenario.segments),
+                message=(
+                    f"Rendu FastH3 batch de {len(jobs)} clips "
+                    f"({len(scenario.segments)} host + {len(scenario.segments)} reporters)"
+                ),
+                clip_count=len(jobs),
             )
-            jobs = create_h3_jobs(scenario.segments, reporter_images, self.settings)
             local_start = time.perf_counter()
-            batch_result = self.h3_renderer.render_batch(jobs, run_id=run_id)  # One call per run.
+            batch_result = self.h3_renderer.render_batch(jobs, run_id=run_id)
             local_elapsed = time.perf_counter() - local_start
-            h3_paths: list[Path] = []
-            for index, job in enumerate(jobs):
+
+            h3_paths: dict[str, Path] = {}
+            h3_durations: dict[str, float] = {}
+            for job in jobs:
                 video_bytes = batch_result.videos.get(job.id)
                 if not video_bytes:
                     raise RuntimeError(f"Le batch FastH3 n'a pas renvoyé {job.id}.")
-                video_path = run_dir / "h3" / f"reporter-{index}.mp4"
+                video_path = run_dir / "h3" / f"{job.id}.mp4"
                 video_path.write_bytes(video_bytes)
-                h3_paths.append(video_path)
                 self.store.register_file(run_id, video_path)
-            from .media import probe_media
-
-            reporter_durations: list[float] = []
-            for path in h3_paths:
-                info = probe_media(path, self.settings)
+                info = probe_media(video_path, self.settings)
                 if not info.video or not info.audio:
                     raise RuntimeError(
-                        f"Clip H3 invalide ou sans audio natif: {path.name}. Aucun fallback silencieux."
+                        f"Clip H3 invalide ou sans audio natif: {video_path.name}. "
+                        "Aucun fallback silencieux."
                     )
-                reporter_durations.append(info.duration)
+                h3_paths[job.id] = video_path
+                h3_durations[job.id] = info.duration
+
+            host_videos = [h3_paths[f"host-{index}"] for index in range(len(scenario.segments))]
+            reporter_videos = [
+                h3_paths[f"reporter-{index}"] for index in range(len(scenario.segments))
+            ]
+            host_durations = [
+                h3_durations[f"host-{index}"] for index in range(len(scenario.segments))
+            ]
+            reporter_durations = [
+                h3_durations[f"reporter-{index}"] for index in range(len(scenario.segments))
+            ]
             h3_elapsed = batch_result.generation_seconds or local_elapsed
             self.store.stage(
                 run_id,
                 active_stage,
                 "succeeded",
-                clip_count=len(h3_paths),
+                clip_count=len(jobs),
                 generation_seconds=round(h3_elapsed, 3),
-                message="Batch FastH3 terminé; un seul appel Modal",
+                message="Batch full-H3 terminé; un seul appel Modal",
             )
 
             active_stage = "assembly"
             self.store.stage(
-                run_id, active_stage, "running", message="Construction timeline et montage local"
+                run_id,
+                active_stage,
+                "running",
+                message="Construction timeline et montage FFmpeg local",
             )
             timeline = build_timeline(
                 run_id=run_id,
                 run_dir=run_dir,
                 scenario=scenario,
                 host_plate=host_plate,
-                host_audio=audio_paths,
-                reporter_videos=h3_paths,
-                host_audio_durations=audio_durations,
+                host_videos=host_videos,
+                reporter_videos=reporter_videos,
+                host_durations=host_durations,
                 reporter_durations=reporter_durations,
                 settings=self.settings,
             )
@@ -196,16 +243,17 @@ class NewsReelPipeline:
                 run_id,
                 status="complete",
                 final_duration_seconds=result["duration_seconds"],
-                h3_clip_count=len(h3_paths),
+                h3_clip_count=len(jobs),
                 h3_generation_seconds=round(h3_elapsed, 3),
                 final_file="newsreel_final.mp4",
                 summary={
                     "title": scenario.title,
                     "subject_count": len(scenario.segments),
-                    "h3_clip_count": len(h3_paths),
+                    "h3_clip_count": len(jobs),
                     "duration_seconds": result["duration_seconds"],
                     "resolution": f"{result['width']}x{result['height']}",
                     "fps": result["fps"],
+                    "creative": scenario.creative,
                     "errors": len(manifest.get("errors", [])),
                 },
             )

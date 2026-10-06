@@ -4,12 +4,16 @@ import base64
 import json
 import re
 import urllib.error
-import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
 from .config import Settings
+from .creative import (
+    DEFAULT_INTENSITY,
+    apply_creative_postprocessing,
+    build_scenario_prompt,
+)
 from .models import NewsItem, Scenario
 
 
@@ -39,7 +43,7 @@ class AgnesClient:
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "NewsReel/1.0",
+                "User-Agent": "NewsReel/2.0",
             },
             method="POST",
         )
@@ -57,42 +61,20 @@ class AgnesClient:
             raise AgnesError("Réponse Agnes JSON inattendue.")
         return data
 
-    def write_scenario(self, news: list[NewsItem], count: int) -> Scenario:
-        compact_news = [
-            {
-                "title": item.title,
-                "source": item.source,
-                "published": item.published,
-                "summary": item.summary,
-                "url": item.url,
-            }
-            for item in news[: max(count, count * 3)]
-        ]
-        prompt = (
-            "Tu es le rédacteur en chef d'un journal télévisé français, factuel et concis. "
-            "Écris un scénario de JT vertical pour un présentateur plateau et un reporter par sujet. "
-            f"Sélectionne exactement {count} sujets dans les articles fournis. N'invente aucun fait; "
-            "n'ajoute des détails que s'ils sont présents dans les sources. "
-            "Pour chaque sujet, fournis un host_dialogue de 10 à 18 mots pour l'introduction plateau, "
-            "et un reporter_dialogue de 20 à 28 mots, prononçable en français en 8 à 10 secondes. "
-            "Le texte reporter sera prononcé exactement par la voix native H3. "
-            "Fournis aussi un reporter_image_prompt en anglais, photoréaliste, sobre, sans texte, "
-            "pour un reporter sur le terrain cohérent avec l'article. Pour reporter_action, propose "
-            "au plus une action visuelle simple, plausible et mesurée, liée au sujet (ou une chaîne "
-            "vide si aucune action ne convient); évite toute chorégraphie, mouvement brusque ou "
-            "changement de décor. L'action doit préserver le visage, la tenue et l'identité du reporter. "
-            "Retourne uniquement un objet JSON, sans markdown, selon ce schéma: "
-            '{"title":"...","host_image_prompt":"...","segments":[{"id":"subject-0",'
-            '"title":"...","source_title":"...","source_url":"...",'
-            '"host_dialogue":"...","reporter_dialogue":"...",'
-            '"reporter_image_prompt":"...","reporter_action":"..."}]}\n\n'
-            f"Articles RSS:\n{json.dumps(compact_news, ensure_ascii=False, indent=2)}"
-        )
+    def write_scenario(
+        self,
+        news: list[NewsItem],
+        count: int,
+        director: str,
+        palette: str,
+        intensity: str = DEFAULT_INTENSITY,
+    ) -> Scenario:
+        prompt = build_scenario_prompt(news, count, director, palette)
         response = self._request(
             "chat/completions",
             {
                 "model": self.settings.agnes_text_model,
-                "temperature": 0.4,
+                "temperature": 0.7,
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": "Réponds uniquement avec du JSON valide."},
@@ -110,25 +92,32 @@ class AgnesClient:
                 for part in content
             )
         text = str(content).strip()
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"^\`\`\`(?:json)?\s*|\s*\`\`\`$", "", text, flags=re.IGNORECASE)
         try:
-            value = json.loads(text)
+            raw_value = json.loads(text)
+            if not isinstance(raw_value, dict):
+                raise ValueError("la racine JSON doit être un objet")
+            value = apply_creative_postprocessing(
+                raw_value, count, director=director, palette=palette, intensity=intensity
+            )
             scenario = Scenario.from_mapping(value)
         except (json.JSONDecodeError, ValueError, TypeError) as exc:
             raise AgnesError(
-                f"Le scénario Agnes n'est pas conforme au schéma NewsReel: {exc}"
+                f"Le scénario Agnes n'est pas conforme au schéma NewsReel créatif: {exc}"
             ) from exc
-        if len(scenario.segments) != count:
-            raise AgnesError(
-                f"Agnes a produit {len(scenario.segments)} sujets au lieu de {count}; "
-                "le pipeline s'arrête pour ne pas générer un JT incomplet."
-            )
-        # Keep source URLs aligned with the RSS items if the model omitted them.
+
         for segment in scenario.segments:
-            if not segment.source_url:
-                match = next((item for item in news if item.title == segment.source_title), None)
-                if match:
-                    segment.source_url = match.url
+            match = next(
+                (
+                    item
+                    for item in news
+                    if item.title == segment.source_title or item.title == segment.title
+                ),
+                None,
+            )
+            if match:
+                segment.source_title = match.title
+                segment.source_url = match.url
         return scenario
 
     def generate_image(self, prompt: str, destination: Path, size: str | None = None) -> Path:
@@ -159,7 +148,7 @@ class AgnesClient:
             url = item.get("url")
             if not url:
                 raise AgnesError("Réponse image Agnes sans URL ni b64_json.")
-            request = urllib.request.Request(url, headers={"User-Agent": "NewsReel/1.0"})
+            request = urllib.request.Request(url, headers={"User-Agent": "NewsReel/2.0"})
             try:
                 with urllib.request.urlopen(request, timeout=180) as image_response:
                     content = image_response.read()

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import math
-import wave
 from pathlib import Path
 from typing import Any
 
 from .assembler import FFmpegAssembler
 from .config import Settings
+from .creative import DEFAULT_DIRECTOR, DEFAULT_INTENSITY, DEFAULT_PALETTE
 from .media import run_ffmpeg
 from .models import NewsItem, Scenario
 from .run_store import RunStore
@@ -24,8 +23,6 @@ def _fake_image(path: Path, label: str, color: tuple[int, int, int]) -> None:
         base = tuple(int(color[i] * (1 - blend) + (8, 19, 37)[i] * blend) for i in range(3))
         draw.line((0, y, width, y), fill=base)
     draw.ellipse((500, 130, 900, 530), fill=(20, 87, 108))
-    draw.rectangle((0, 850, width, 1050), fill=(5, 15, 29))
-    draw.rectangle((0, 860, 20, 1040), fill=(38, 207, 215))
     try:
         font = ImageFont.truetype("DejaVuSans-Bold.ttf", 42)
     except OSError:
@@ -34,25 +31,7 @@ def _fake_image(path: Path, label: str, color: tuple[int, int, int]) -> None:
     image.save(path, format="PNG")
 
 
-def _fake_audio(path: Path, duration: float, frequency: float) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    sample_rate = 24000
-    frames = int(sample_rate * duration)
-    with wave.open(str(path), "wb") as output:
-        output.setnchannels(1)
-        output.setsampwidth(2)
-        output.setframerate(sample_rate)
-        data = bytearray()
-        for frame in range(frames):
-            t = frame / sample_rate
-            envelope = min(1.0, t / 0.08, (duration - t) / 0.08)
-            # A low-volume synthetic tone deliberately stands in for speech in this offline fixture.
-            sample = int(2500 * max(envelope, 0) * math.sin(2 * math.pi * frequency * t))
-            data.extend(sample.to_bytes(2, byteorder="little", signed=True))
-        output.writeframes(data)
-
-
-def _fake_reporter_video(path: Path, color: str, frequency: int, settings: Settings) -> None:
+def _fake_h3_video(path: Path, color: str, frequency: int, settings: Settings) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     run_ffmpeg(
         [
@@ -102,7 +81,7 @@ def run_offline_demo(
     run_id: str | None = None,
     store: RunStore | None = None,
 ) -> dict[str, Any]:
-    """Builds a complete fixture -> timeline -> FFmpeg final MP4 without network or GPU calls."""
+    """Build a full-H3-shaped fixture locally without network or GPU calls."""
     store = store or RunStore(settings.output_dir or settings.project_root / "output")
     if run_id is not None and (store.output_root / run_id / "run_manifest.json").is_file():
         run_dir = store.path(run_id)
@@ -116,26 +95,18 @@ def run_offline_demo(
             "Climat : un nouvel accord européen",
             "Technologie : l'IA à l'école",
         ]
-        source_titles = [
-            "Le point sur les marchés de l'énergie",
-            "Les ministres européens annoncent un accord",
-            "Les établissements testent de nouveaux outils",
-        ]
         host_plate = run_dir / "images" / "host-plate.png"
         _fake_image(host_plate, "PLATEAU NEWSREEL · MODE DÉMO", (16, 92, 120))
+
         reporter_images: list[Path] = []
-        host_audio: list[Path] = []
+        host_videos: list[Path] = []
         reporter_videos: list[Path] = []
-        audio_durations: list[float] = []
-        reporter_durations = [10.125, 10.125, 10.125]
         segments = []
         news = []
-        for index, (headline, source_title, color) in enumerate(
-            zip(headlines, source_titles, colors, strict=True)
-        ):
+        for index, (headline, color) in enumerate(zip(headlines, colors, strict=True)):
             news.append(
                 NewsItem(
-                    title=source_title,
+                    title=headline,
                     url=f"https://example.invalid/demo/{index}",
                     source="Fixture hors-ligne",
                     published="fixture",
@@ -145,36 +116,59 @@ def run_offline_demo(
             segments.append(
                 {
                     "id": f"subject-{index}",
-                    "title": headline,
-                    "source_title": source_title,
+                    "headline": headline,
+                    "summary": "Résumé factuel de fixture.",
+                    "source_title": headline,
                     "source_url": news[-1].url,
-                    "host_dialogue": (
-                        f"{headline}. Notre rédaction fait le point sur les éléments confirmés."
-                    ),
-                    "reporter_dialogue": (
-                        f"Voici les faits essentiels concernant {headline.lower()}. "
-                        "Les détails restent à suivre dans les prochaines heures."
-                    ),
-                    "reporter_image_prompt": "Fixture image de reporter, jamais générée par une IA.",
+                    "host_dialogue": f"{headline}. La rédaction fait le point.",
+                    "host_action": "a chrome console starts blinking behind the host",
+                    "people": [
+                        {
+                            "name": "Figurant",
+                            "description": "retro-futuristic funny costume",
+                            "role": "witness",
+                        }
+                    ],
+                    "location": "hallucinatory retrofuturist test set",
+                    "scene_action": "a harmless oversized prop slowly rolls through the frame",
+                    "camera_plan": "establishing shot, reaction close-up, final wide",
+                    "reporter": {
+                        "name": f"Reporter {index + 1}",
+                        "description": "retro-futuristic field reporter",
+                        "dialogue": "Même le décor a décidé de commenter la situation à sa manière.",
+                    },
                 }
             )
             reporter_image = run_dir / "images" / f"reporter-{index}.png"
             _fake_image(reporter_image, f"REPORTER {index + 1} · FIXTURE", color)
             reporter_images.append(reporter_image)
-            audio = run_dir / "audio" / f"host-{index}.wav"
-            _fake_audio(audio, duration=4.4, frequency=185 + index * 35)
-            host_audio.append(audio)
-            audio_durations.append(4.4)
-            video = run_dir / "h3" / f"reporter-{index}.mp4"
-            _fake_reporter_video(
-                video, f"0x{color[0]:02x}{color[1]:02x}{color[2]:02x}", 320 + index * 70, settings
+
+            host_video = run_dir / "h3" / f"host-{index}.mp4"
+            reporter_video = run_dir / "h3" / f"reporter-{index}.mp4"
+            _fake_h3_video(host_video, "0x105c78", 210 + index * 25, settings)
+            _fake_h3_video(
+                reporter_video,
+                f"0x{color[0]:02x}{color[1]:02x}{color[2]:02x}",
+                320 + index * 70,
+                settings,
             )
-            reporter_videos.append(video)
+            host_videos.append(host_video)
+            reporter_videos.append(reporter_video)
 
         scenario = Scenario.from_mapping(
             {
                 "title": "JT NewsReel — démonstration hors-ligne",
-                "host_image_prompt": "Portrait fictif, fixture locale.",
+                "host": {
+                    "name": "Chroniqueur",
+                    "description": "retrofuturistic anchor fixture",
+                    "plateau": "hallucinatory retrofuturistic TV set",
+                    "host_action": "a chrome console malfunctions",
+                },
+                "creative": {
+                    "director": DEFAULT_DIRECTOR,
+                    "palette": DEFAULT_PALETTE,
+                    "intensity": DEFAULT_INTENSITY,
+                },
                 "segments": segments,
             }
         )
@@ -188,23 +182,23 @@ def run_offline_demo(
         store.stage(
             run_id, "scenario", "succeeded", subject_count=len(segments), mode="offline-fixture"
         )
-        for path in [host_plate, *reporter_images, *host_audio]:
+        for path in [host_plate, *reporter_images]:
             store.register_file(run_id, path)
         store.stage(
             run_id,
             "images",
             "succeeded",
             image_count=4,
-            host_audio_count=3,
+            host_audio_count=0,
             mode="synthetic-fixtures",
         )
-        for path in reporter_videos:
+        for path in [*host_videos, *reporter_videos]:
             store.register_file(run_id, path)
         store.stage(
             run_id,
             "h3",
             "succeeded",
-            clip_count=3,
+            clip_count=6,
             generation_seconds=None,
             mode="synthetic-video-fixtures-no-gpu",
         )
@@ -213,10 +207,10 @@ def run_offline_demo(
             run_dir,
             scenario,
             host_plate,
-            host_audio,
+            host_videos,
             reporter_videos,
-            audio_durations,
-            reporter_durations,
+            [10.125] * 3,
+            [10.125] * 3,
             settings,
         )
         timeline_path = run_dir / "timeline.json"
@@ -242,13 +236,13 @@ def run_offline_demo(
             run_id,
             status="complete",
             final_duration_seconds=result["duration_seconds"],
-            h3_clip_count=3,
+            h3_clip_count=6,
             h3_generation_seconds=None,
             final_file="newsreel_final.mp4",
             summary={
                 "title": scenario.title,
                 "subject_count": 3,
-                "h3_clip_count": 3,
+                "h3_clip_count": 6,
                 "duration_seconds": result["duration_seconds"],
                 "resolution": f"{result['width']}x{result['height']}",
                 "fps": result["fps"],

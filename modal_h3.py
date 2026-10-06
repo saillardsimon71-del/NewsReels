@@ -74,23 +74,23 @@ def validate_batch(payload: dict[str, Any]) -> list[dict[str, Any]]:
     seen_ids: set[str] = set()
     for index, job in enumerate(jobs):
         if not isinstance(job, dict):
-            raise ValueError(f"Job reporter #{index + 1} invalide.")
+            raise ValueError(f"Job H3 #{index + 1} invalide.")
         job_id = job.get("id")
         if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", job_id):
-            raise ValueError(f"Identifiant invalide pour le job reporter #{index + 1}.")
+            raise ValueError(f"Identifiant invalide pour le job H3 #{index + 1}.")
         if job_id in seen_ids:
-            raise ValueError(f"Identifiant de job reporter dupliqué: {job_id}.")
+            raise ValueError(f"Identifiant de job H3 dupliqué: {job_id}.")
         seen_ids.add(job_id)
         if not isinstance(job.get("prompt"), str) or not job["prompt"].strip():
-            raise ValueError(f"Prompt vide pour le job reporter {job_id}.")
+            raise ValueError(f"Prompt vide pour le job H3 {job_id}.")
         if not isinstance(job.get("image_base64"), str) or not job["image_base64"]:
-            raise ValueError(f"Image base64 absente pour le job reporter {job_id}.")
+            raise ValueError(f"Image base64 absente pour le job H3 {job_id}.")
         for key, expected in required_per_job.items():
             if job.get(key) != expected:
                 raise ValueError(f"Paramètre FastH3 requis invalide pour {job_id}: {key}.")
         seed = job.get("seed")
         if not isinstance(seed, int) or not 0 <= seed < 2**53:
-            raise ValueError(f"Seed invalide pour le job reporter {job_id}.")
+            raise ValueError(f"Seed invalide pour le job H3 {job_id}.")
     return jobs
 
 
@@ -378,7 +378,7 @@ def _run_batch(payload: dict[str, Any]) -> dict[str, Any]:
     generation_start = time.perf_counter()
     run_id = payload["run_id"]
     try:
-        # Keep one ComfyUI process and the exact same model-loader node IDs for every reporter.
+        # Keep one ComfyUI process and the exact same model-loader node IDs for every H3 clip.
         for job in jobs:
             job_id = job["id"]
             try:
@@ -460,7 +460,7 @@ if modal is not None:
         volumes={str(MODELS_ROOT): models_volume},
     )
     def render_h3_batch(payload: dict[str, Any]) -> dict[str, Any]:
-        """Render all reporter clips sequentially in one disposable L40S/ComfyUI worker."""
+        """Render all host + reporter clips sequentially in one disposable L40S/ComfyUI worker."""
         return _run_batch(payload)
 else:
     app = None

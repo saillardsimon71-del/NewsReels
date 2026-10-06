@@ -6,10 +6,8 @@ from .config import Settings
 from .models import Scenario, Scene, Timeline
 from .run_store import RunStore
 
-HOST_MIN_SECONDS = 3.5
-HOST_AUDIO_MARGIN_SECONDS = 0.4
-INTRO_SECONDS = 2.5
-OUTRO_SECONDS = 2.0
+INTRO_SECONDS = 1.5
+OUTRO_SECONDS = 1.5
 
 
 def _relative(path: Path, run_dir: Path) -> str:
@@ -21,18 +19,18 @@ def build_timeline(
     run_dir: Path,
     scenario: Scenario,
     host_plate: Path,
-    host_audio: list[Path],
+    host_videos: list[Path],
     reporter_videos: list[Path],
-    host_audio_durations: list[float],
+    host_durations: list[float],
     reporter_durations: list[float],
     settings: Settings,
 ) -> Timeline:
     count = len(scenario.segments)
     if not all(
         len(values) == count
-        for values in (host_audio, reporter_videos, host_audio_durations, reporter_durations)
+        for values in (host_videos, reporter_videos, host_durations, reporter_durations)
     ):
-        raise ValueError("Les assets et durées doivent correspondre au nombre de sujets.")
+        raise ValueError("Les assets et durées H3 doivent correspondre au nombre de sujets.")
 
     scenes: list[Scene] = [
         Scene(
@@ -42,27 +40,23 @@ def build_timeline(
             duration=INTRO_SECONDS,
             motion="slow_push_in",
             title="NEWSREEL",
-            kicker="L'actualité, en bref",
+            kicker="LE JT SATIRIQUE",
         )
     ]
-    host_motions = ("slow_push_in", "slow_pan_left", "slow_pan_right")
     for index, segment in enumerate(scenario.segments):
-        actual_audio = float(host_audio_durations[index])
-        if actual_audio <= 0:
-            raise ValueError(f"Audio host vide pour le sujet {index + 1}.")
-        # Never trim speech to enforce the target runtime: the voice duration is the source of truth.
-        host_duration = max(HOST_MIN_SECONDS, actual_audio + HOST_AUDIO_MARGIN_SECONDS)
+        host_duration = float(host_durations[index])
+        reporter_duration = float(reporter_durations[index])
+        if host_duration <= 0 or reporter_duration <= 0:
+            raise ValueError(f"Durée H3 invalide pour le sujet {index + 1}.")
         scenes.append(
             Scene(
                 id=f"host-{index}",
-                type="host_still",
-                asset=_relative(host_plate, run_dir),
-                audio=_relative(host_audio[index], run_dir),
+                type="h3_video",
+                asset=_relative(host_videos[index], run_dir),
                 dialogue=segment.host_dialogue,
                 duration=round(host_duration, 3),
-                motion=host_motions[index % len(host_motions)],
                 title=segment.title,
-                kicker="EN DIRECT • NEWSREEL",
+                kicker="NEWSREEL • PLATEAU",
                 source_url=segment.source_url,
             )
         )
@@ -72,9 +66,9 @@ def build_timeline(
                 type="h3_video",
                 asset=_relative(reporter_videos[index], run_dir),
                 dialogue=segment.reporter_dialogue,
-                duration=round(float(reporter_durations[index]), 3),
+                duration=round(reporter_duration, 3),
                 title=segment.title,
-                kicker="LE POINT SUR LA SITUATION",
+                kicker="NEWSREEL • SUR LE TERRAIN",
                 source_url=segment.source_url,
             )
         )
@@ -86,7 +80,7 @@ def build_timeline(
             duration=OUTRO_SECONDS,
             motion="slow_pull_out",
             title="NEWSREEL",
-            kicker="À bientôt pour un nouveau JT",
+            kicker="À BIENTÔT",
         )
     )
     timeline = Timeline(
@@ -95,6 +89,7 @@ def build_timeline(
         width=settings.width,
         height=settings.height,
         scenes=scenes,
+        version=2,
     )
     RunStore.atomic_write_json(run_dir / "timeline.json", timeline.to_dict())
     return timeline
