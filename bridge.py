@@ -15,7 +15,6 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from newsreel.assembler import FFmpegAssembler
-from newsreel.comfy_workflow import validate_api_workflow
 from newsreel.config import Settings
 from newsreel.demo import run_offline_demo
 from newsreel.h3_worker_contract import ModalH3Renderer, create_h3_jobs
@@ -76,9 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "ffmpeg_available": bool(ffmpeg),
             "ffprobe_available": bool(ffprobe),
             "agnes_key_configured": bool(os.getenv("AGNES_API_KEY")),
-            "h3_workflow_configured": bool(
-                runtime_settings.h3_workflow_path and runtime_settings.h3_workflow_path.is_file()
-            ),
+            "h3_graph_built_in": True,
             "modal_client_installed": importlib.util.find_spec("modal") is not None,
             "tts_provider_installed": importlib.util.find_spec("edge_tts") is not None,
             "output_dir": str(output_root),
@@ -112,22 +109,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=409,
                 detail="FFmpeg et ffprobe doivent être installés avant tout appel Agnes/Modal.",
             )
-        if not (runtime_settings.h3_workflow_path and runtime_settings.h3_workflow_path.is_file()):
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Workflow API FastH3 validé absent. Définissez NEWSREEL_H3_API_WORKFLOW; "
-                    "aucune génération Agnes/Modal ne sera lancée sans ce fichier."
-                ),
-            )
-        try:
-            workflow = json.loads(runtime_settings.h3_workflow_path.read_text(encoding="utf-8"))
-            validate_api_workflow(workflow)
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Workflow FastH3 invalide; aucun appel Agnes/Modal lancé: {exc}",
-            ) from exc
         if importlib.util.find_spec("modal") is None:
             raise HTTPException(
                 status_code=409,
@@ -277,8 +258,8 @@ def _render_h3_run(
     try:
         jobs = create_h3_jobs(scenario.segments, images, settings)
         result = ModalH3Renderer(
-            settings.modal_app_name, settings.modal_function_name, settings.h3_workflow_path
-        ).render_batch(jobs)
+            settings.modal_app_name, settings.modal_function_name
+        ).render_batch(jobs, run_id=run_id)
         for index, job in enumerate(jobs):
             path = run_dir / "h3" / f"reporter-{index}.mp4"
             path.write_bytes(result.videos[job.id])

@@ -16,7 +16,7 @@ from .tts import EdgeTTSProvider, TTSProvider
 
 
 class H3Renderer(Protocol):
-    def render_batch(self, jobs: list[H3Job]) -> H3BatchResult: ...
+    def render_batch(self, jobs: list[H3Job], run_id: str | None = None) -> H3BatchResult: ...
 
 
 class NewsReelPipeline:
@@ -36,7 +36,7 @@ class NewsReelPipeline:
         self.news_provider = news_provider or GoogleNewsRSS()
         self.tts_provider = tts_provider or EdgeTTSProvider(settings)
         self.h3_renderer = h3_renderer or ModalH3Renderer(
-            settings.modal_app_name, settings.modal_function_name, settings.h3_workflow_path
+            settings.modal_app_name, settings.modal_function_name
         )
         self.assembler = assembler or FFmpegAssembler(settings)
 
@@ -127,7 +127,7 @@ class NewsReelPipeline:
             )
             jobs = create_h3_jobs(scenario.segments, reporter_images, self.settings)
             local_start = time.perf_counter()
-            batch_result = self.h3_renderer.render_batch(jobs)  # Exactly one call for this run.
+            batch_result = self.h3_renderer.render_batch(jobs, run_id=run_id)  # One call per run.
             local_elapsed = time.perf_counter() - local_start
             h3_paths: list[Path] = []
             for index, job in enumerate(jobs):

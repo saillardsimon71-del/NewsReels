@@ -1,37 +1,50 @@
 # NewsReel V1 — générateur de JT local → MP4
 
-NewsReel assemble un journal vertical prêt à publier dans `output/<run_id>/newsreel_final.mp4`.
-Le run par défaut contient trois sujets et utilise une seule requête batch FastH3 pour tous les reporters. Le plateau du présentateur est une image Agnes animée localement (Ken Burns), sa voix est générée par Edge TTS, puis FFmpeg fait le montage **sur le PC**.
+NewsReel assemble un journal vertical dans `output/<run_id>/newsreel_final.mp4`. Le run par défaut contient trois sujets et envoie **un seul batch Modal** pour les reporters. Agnes prépare le scénario et les images; Edge TTS génère localement la voix du présentateur; le plateau est animé et le montage final est réalisé localement par FFmpeg.
 
-## État des références source
+## Intégration FastH3
 
-Dans le checkout fourni pour cette mission, `git ls-files` ne contient que le README initial : aucun dossier `reference/`, `videomaker/`, `fasth3_push_test.py` ou ancien bridge n'est présent. Le worker ci-dessous ne choisit donc pas à leur place un autre modèle, checkpoint ou workflow VSA. Il consomme un export **ComfyUI API JSON du workflow FastH3 validé** et conserve ses nœuds/modèles/réglages, en ne changeant que l'image, le dialogue, la résolution/cadence/durée demandées et le nom de sortie. Si cet export n'est pas configuré, le bridge bloque le run avant les appels Agnes (pour éviter des coûts inutiles) au lieu de lancer un workflow supposé.
+Le graphe ComfyUI API est construit directement en Python par `newsreel/h3_workflow.py` et exécuté par `modal_h3.py`. Aucun export JSON ComfyUI, fichier de workflow ou chemin de workflow externe n'est requis. Les modèles, réglages et connexions du graphe sont fixés dans le code et vérifiés hors ligne par les tests.
 
-Cette absence est la limitation d'intégration à lever avant le premier vrai rendu H3; tout le chemin de montage est autonome et démontrable sans Agnes ni Modal.
+Configuration appliquée :
+
+- **FastH3 8-Step V2 / MiniMax H3**, image **768×1344**, **243 frames à 24 fps** (10,125 s), **BasicScheduler `simple`, 8 étapes**, sampler **`res_multistep`**;
+- audio natif H3 avec `MiniMaxH3SigmaShift` vidéo **10** / audio **3**;
+- `ModelAttentionBackend` **`comfy kitchen attention`** et `BlockSparseAttention` VSA (`keep_percent=10`, début `0.2`, fin `1`);
+- UNet `fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors`;
+- text encoder `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`;
+- VAE vidéo `minimax_h3_video_vae_int8_convrot.safetensors` et VAE audio `minimax_h3_audio_vae_fp32.safetensors`.
+
+Pour les trois reporters, le bridge fait un seul appel Modal. Le worker démarre un ComfyUI sur un unique conteneur L40S, traite les clips séquentiellement avec les mêmes IDs de nœuds chargeurs, puis termine ComfyUI et détruit le conteneur. Ressources : **8 CPU, 98304 MiB, timeout 5400 s, un conteneur maximum, `single_use_containers=True`**; ComfyUI démarre avec `--disable-comfy-compiler`. Les poids sont lus depuis le volume Modal existant `fasth3-models`; le worker refuse de substituer un modèle manquant.
+
+### Note sur les références de smoke test
+
+Le checkout inspecté ne contient pas `reference/fasth3_push_test.py`. Le graphe ci-dessus applique les paramètres FastH3 explicitement fournis et ceux du template public Comfy-Org; cette absence ne doit pas être interprétée comme une preuve de parité bit à bit avec un smoke test privé. Le worker clone `https://github.com/Comfy-Org/ComfyUI.git`, dépôt déjà utilisé par le prototype Modal présent sur `origin/main`, mais la révision précise du push-test FastH3 n'a pas pu être vérifiée depuis ce checkout.
 
 ## Architecture
 
 ```text
 bridge.py                     API FastAPI locale + progression/polling + livraison MP4
-modal_h3.py                   worker Modal: 1 conteneur L40S, 1 ComfyUI, batch séquentiel
+modal_h3.py                   worker Modal: 1 L40S, 1 ComfyUI, batch séquentiel
 newsreel/config.py            configuration Windows / chemins FFmpeg / Agnes
 newsreel/models.py            scénario, scène et timeline sérialisables
 newsreel/timeline.py          timeline source de vérité (host → reporter → ...)
 newsreel/agnes.py             client texte + image Agnes OpenAI-compatible
 newsreel/news.py              Google News RSS français
 newsreel/tts.py               abstraction TTS et adaptateur Edge TTS
-newsreel/h3_worker_contract.py contrat fixe FastH3 et appel Modal batch unique
+newsreel/h3_workflow.py       graphe FastH3 API construit dans le code
+newsreel/h3_worker_contract.py contrat fixe et appel Modal batch unique
 newsreel/assembler.py         montage local H.264/AAC, titres, audio et validation ffprobe
 newsreel/run_store.py         isolation `output/<run_id>` et run_manifest.json
 web/index.html                interface sans framework
 newsreel/demo.py              fixtures synthétiques, entièrement hors-ligne
 ```
 
-Réglages FastH3 du contrat : **FastH3 8-Step V2 / MiniMax H3, 768×1344, 24 fps, 243 frames / 10,125 s, 8 étapes, audio natif, VSA, L40S**, volume Modal `fasth3-models`. Les générations H3 partent en un seul appel Modal par run; la boucle des jobs conserve le même processus ComfyUI.
+Les runs sont isolés, `timeline.json` reste la source de vérité du montage, le TTS host Edge s'exécute sur la machine locale et FFmpeg produit `newsreel_final.mp4` localement. Le mode démo synthétique n'appelle ni Agnes, ni Modal, ni GPU.
 
 ## Installation Windows (PowerShell)
 
-Exemple avec le chemin de projet de la machine cible :
+Chemin cible : `C:\Users\saill\Downloads\videomaker`.
 
 ```powershell
 cd C:\Users\saill\Downloads\videomaker
@@ -41,7 +54,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Installer FFmpeg (ffmpeg **et** ffprobe) et rouvrir le terminal pour actualiser le PATH :
+Installer FFmpeg (les exécutables `ffmpeg` **et** `ffprobe`) et rouvrir le terminal pour actualiser le PATH :
 
 ```powershell
 winget install --id Gyan.FFmpeg.Shared -e
@@ -49,55 +62,44 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Si les exécutables ne sont pas dans le PATH :
+Si FFmpeg n'est pas dans le PATH, indiquer ses exécutables :
 
 ```powershell
 $env:NEWSREEL_FFMPEG = "C:\tools\ffmpeg\bin\ffmpeg.exe"
 $env:NEWSREEL_FFPROBE = "C:\tools\ffmpeg\bin\ffprobe.exe"
 ```
 
-Configurer Agnes et le chemin de l'export du workflow FastH3 validé. La clé peut aussi être saisie dans l'interface; elle n'est pas écrite dans les fichiers du run.
+## Préparer Modal et lancer le premier vrai run
 
-```powershell
-$env:AGNES_API_KEY = "<votre clé Agnes>"
-$env:AGNES_API_BASE_URL = "https://apihub.agnes-ai.com/v1"
-$env:AGNES_TEXT_MODEL = "agnes-2.5-flash"
-$env:AGNES_IMAGE_MODEL = "agnes-image-2.1-flash"
-$env:NEWSREEL_H3_API_WORKFLOW = "C:\Users\saill\Downloads\videomaker\reference\fasth3_api_workflow.json"
-```
-
-Une copie de ces variables peut être placée dans `.env` (voir `.env.example`); le bridge charge ce fichier au démarrage. Ne commitez jamais `.env`.
-
-Lancer le bridge local :
-
-```powershell
-python bridge.py
-```
-
-Puis ouvrir **http://127.0.0.1:8000**. Le bouton « Démo hors-ligne » fabrique des actualités, images, audio et trois clips vidéo synthétiques, puis exécute le vrai moteur FFmpeg sans contacter Agnes, Modal ou un GPU.
-
-## Préparer le worker Modal (premier test réel)
-
-1. Vérifier que le volume de smoke nommé `fasth3-models` existe bien et contient les mêmes fichiers de poids que le test FastH3 validé.
-2. Depuis ce checkout Windows, installer le client Modal dans le venv et s'authentifier via la procédure Modal habituelle :
+1. Vérifier dans le compte Modal que le volume existant `fasth3-models` contient **les quatre noms de fichiers exacts ci-dessus** dans les catégories ComfyUI `diffusion_models`, `text_encoders` et `vae`. Le worker échoue explicitement si l'un manque.
+2. Installer le client Modal et l'associer au compte habituel :
    ```powershell
    python -m pip install -r requirements-modal.txt
    modal setup
+   modal volume ls fasth3-models
    ```
-3. Exporter en **format API** le workflow réellement utilisé par `fasth3_push_test.py` (ComfyUI → *Save / Export API workflow*) vers le chemin donné dans `NEWSREEL_H3_API_WORKFLOW`. Le graphe doit inclure ses nœuds validés d'image-vers-vidéo, FastH3 8-Step V2 et Video Sparse Attention. Le worker conserve les choix de checkpoint, VAE, text encoder, attention/VSA, sampler et autres nœuds du fichier.
-4. Déployer le worker une fois :
+3. Déployer le worker (cela construit l'image ComfyUI; **aucun rendu GPU n'est déclenché par le déploiement**) :
    ```powershell
    modal deploy modal_h3.py
    ```
-   Le déploiement construit ComfyUI dans l'image Modal et monte `fasth3-models` sous `/mnt/fasth3-models`; aucun clip n'est généré pendant l'installation.
-5. Démarrer `python bridge.py`, saisir la clé Agnes dans l'interface, garder 3 sujets, puis cliquer **Lancer le JT**. Le bridge récupère le RSS, appelle Agnes, produit les quatre images, synthétise les trois prises host, envoie le batch FastH3 une seule fois, puis assemble localement.
-6. Suivre les étapes ou `GET /run/<run_id>`. Le résultat est `output/<run_id>/newsreel_final.mp4` et peut être téléchargé depuis la carte **JT FINAL**.
+4. Configurer Agnes et démarrer l'interface locale. La clé peut aussi être saisie directement dans l'interface; elle n'est pas écrite dans le manifeste du run.
+   ```powershell
+   $env:AGNES_API_KEY = "<votre clé Agnes>"
+   $env:AGNES_API_BASE_URL = "https://apihub.agnes-ai.com/v1"
+   $env:AGNES_TEXT_MODEL = "agnes-2.5-flash"
+   $env:AGNES_IMAGE_MODEL = "agnes-image-2.5-flash"
+   $env:AGNES_IMAGE_SIZE = "768x1344"
+   $env:NEWSREEL_MODAL_APP = "newsreel-fasth3"
+   $env:NEWSREEL_MODAL_FUNCTION = "render_h3_batch"
+   python bridge.py
+   ```
+5. Ouvrir **http://127.0.0.1:8000**, garder trois sujets et cliquer **Lancer le JT**. NewsReel récupère le RSS, appelle Agnes, synthétise les prises host, envoie les trois reporters dans un seul appel Modal séquentiel, puis assemble le tout localement. Le résultat est `output/<run_id>/newsreel_final.mp4`.
 
-**Important :** tant que le fichier `reference/fasth3_push_test.py` et son workflow API exporté ne sont pas réintroduits/configurés, le bridge bloque le démarrage réel **avant tout appel Agnes/Modal**. N'exportez pas un workflow différent si l'objectif est de reproduire à l'identique le test validé.
+Une copie des variables non secrètes est disponible dans `.env.example`; le bridge charge `.env` au démarrage. Ne commitez jamais `.env`.
 
 ## Démonstration et tests hors-ligne
 
-Aucune de ces commandes ne contacte Agnes, Modal ou un GPU :
+Les commandes suivantes n'appellent pas Agnes, Modal ou de GPU :
 
 ```powershell
 python -m pip install -r requirements-dev.txt
@@ -105,11 +107,11 @@ python -m newsreel.demo
 python -m pytest -q
 ```
 
-Le test d'intégration génère des assets synthétiques puis vérifie réellement avec ffprobe : existence du MP4, durée 45–60 s, 1080×1920, 24 fps et présence d'audio. Les tests de contrat garantissent aussi que le dialogue reporter exact est inclus dans `<d>[French] …</d>` et que les paramètres H3 validés ne dérivent pas.
+La démo fabrique des assets synthétiques puis vérifie avec ffprobe le MP4, sa durée, sa résolution 1080×1920, ses 24 fps et son audio. Les tests de contrat vérifient hors ligne les modèles FastH3, les dimensions, frames/fps/steps, VSA, shifts, dialogue français exact, audio natif, le graphe construit dans le code et l'unicité de l'appel Modal batch.
 
 ## API locale
 
-- `GET /health` — état local, disponibilité FFmpeg et configuration non secrète
+- `GET /health` — état local, disponibilité FFmpeg, graphe intégré et dépendances
 - `GET /config` — paramètres UI Agnes/TTS
 - `POST /runs` — démarre un run Agnes → H3 batch → assemblage
 - `POST /demo` — démarre un run de fixtures hors-ligne
@@ -118,4 +120,4 @@ Le test d'intégration génère des assets synthétiques puis vérifie réelleme
 - `GET /run/<run_id>` — manifeste, progression, timeline et lien final
 - `GET /output/<run_id>/<path>` — lecture/téléchargement des fichiers du run
 
-Chaque run a son dossier propre; les chemins d'assets de `timeline.json` sont relatifs au run et la timeline est la source de vérité du montage.
+Chaque run a son dossier propre; les chemins d'assets de `timeline.json` sont relatifs au run et la timeline reste la source de vérité du montage.

@@ -139,7 +139,7 @@
           <label for="agnesBase">API base URL</label><input id="agnesBase" value="https://apihub.agnes-ai.com/v1">
           <div class="two">
             <div><label for="textModel">Modèle texte</label><input id="textModel" value="agnes-2.5-flash"></div>
-            <div><label for="imageModel">Modèle image</label><input id="imageModel" value="agnes-image-2.1-flash"></div>
+            <div><label for="imageModel">Modèle image</label><input id="imageModel" value="agnes-image-2.5-flash"></div>
           </div>
           <label for="imageSize">Taille image Agnes</label><input id="imageSize" value="768x1344">
           <p class="hint">La clé n'est pas écrite dans le scénario ni le manifeste. Vous pouvez aussi définir AGNES_API_KEY dans l'environnement du bridge local.</p>
@@ -352,13 +352,13 @@
   }).catch(() => {});
   getJson("/health").then((health) => {
     const mediaReady = health.ffmpeg_available && health.ffprobe_available;
-    const liveReady = mediaReady && health.h3_workflow_configured && health.modal_client_installed && health.tts_provider_installed;
+    const liveReady = mediaReady && health.h3_graph_built_in && health.modal_client_installed && health.tts_provider_installed;
     $("healthDot").style.background = liveReady ? "var(--green)" : "var(--yellow)";
     $("healthText").textContent = liveReady
       ? "Bridge local · Agnes / FastH3 configurés"
       : mediaReady ? "Bridge prêt · démo locale disponible" : "Bridge prêt · FFmpeg à installer";
     if (!mediaReady) showNotice("FFmpeg et ffprobe sont nécessaires au montage. Consultez le README avant de lancer un run.");
-    else if (!liveReady) showNotice("La démo locale est prête. Le run réel reste bloqué avant tout appel Agnes tant que le workflow API FastH3, Modal et TTS ne sont pas configurés.");
+    else if (!liveReady) showNotice("La démo locale est prête. Le graphe FastH3 est intégré au worker; installez le client Modal et Edge TTS avant le premier run réel.");
   }).catch((error) => { $("healthText").textContent = "Bridge local indisponible"; showNotice(error.message); });
 })();
 </script>

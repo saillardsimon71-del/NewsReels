@@ -77,7 +77,10 @@ class AgnesClient:
             "et un reporter_dialogue de 20 à 28 mots, prononçable en français en 8 à 10 secondes. "
             "Le texte reporter sera prononcé exactement par la voix native H3. "
             "Fournis aussi un reporter_image_prompt en anglais, photoréaliste, sobre, sans texte, "
-            "pour un reporter sur le terrain cohérent avec l'article. "
+            "pour un reporter sur le terrain cohérent avec l'article. Pour reporter_action, propose "
+            "au plus une action visuelle simple, plausible et mesurée, liée au sujet (ou une chaîne "
+            "vide si aucune action ne convient); évite toute chorégraphie, mouvement brusque ou "
+            "changement de décor. L'action doit préserver le visage, la tenue et l'identité du reporter. "
             "Retourne uniquement un objet JSON, sans markdown, selon ce schéma: "
             '{"title":"...","host_image_prompt":"...","segments":[{"id":"subject-0",'
             '"title":"...","source_title":"...","source_url":"...",'

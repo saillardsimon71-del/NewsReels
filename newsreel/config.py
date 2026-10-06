@@ -5,6 +5,8 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .h3_workflow import H3_DURATION_SECONDS, H3_FPS, H3_HEIGHT, H3_STEPS, H3_WIDTH
+
 
 def _resolve_path(value: str | Path | None, base: Path) -> Path | None:
     if value is None or str(value).strip() == "":
@@ -24,20 +26,19 @@ class Settings:
     tts_voice: str = "fr-FR-DeniseNeural"
     agnes_base_url: str = "https://apihub.agnes-ai.com/v1"
     agnes_text_model: str = "agnes-2.5-flash"
-    agnes_image_model: str = "agnes-image-2.1-flash"
+    agnes_image_model: str = "agnes-image-2.5-flash"
     agnes_image_size: str = "768x1344"
     agnes_timeout_seconds: int = 180
     modal_app_name: str = "newsreel-fasth3"
     modal_function_name: str = "render_h3_batch"
-    h3_workflow_path: Path | None = None
     width: int = 1080
     height: int = 1920
     fps: int = 24
-    h3_width: int = 768
-    h3_height: int = 1344
-    h3_fps: int = 24
-    h3_duration_seconds: float = 10.125
-    h3_steps: int = 8
+    h3_width: int = H3_WIDTH
+    h3_height: int = H3_HEIGHT
+    h3_fps: int = H3_FPS
+    h3_duration_seconds: float = H3_DURATION_SECONDS
+    h3_steps: int = H3_STEPS
     max_news_items: int = 12
 
     def __post_init__(self) -> None:
@@ -47,16 +48,14 @@ class Settings:
             object.__setattr__(self, "output_dir", root / "output")
         else:
             object.__setattr__(self, "output_dir", _resolve_path(self.output_dir, root))
-        if self.h3_workflow_path is not None:
-            object.__setattr__(self, "h3_workflow_path", _resolve_path(self.h3_workflow_path, root))
         if self.width < 1 or self.height < 1 or self.fps < 1:
             raise ValueError("La résolution et le framerate de sortie doivent être positifs.")
         if (self.h3_width, self.h3_height, self.h3_fps, self.h3_steps) != (
-            768,
-            1344,
-            24,
-            8,
-        ) or self.h3_duration_seconds != 10.125:
+            H3_WIDTH,
+            H3_HEIGHT,
+            H3_FPS,
+            H3_STEPS,
+        ) or self.h3_duration_seconds != H3_DURATION_SECONDS:
             raise ValueError(
                 "Le contrat validé FastH3 V2 est fixé à 768x1344, 24 fps, 243 frames / "
                 "10,125 s et 8 étapes."
@@ -66,7 +65,6 @@ class Settings:
     def from_env(cls, project_root: Path | None = None) -> Settings:
         root = (project_root or Path(__file__).resolve().parents[1]).expanduser().resolve()
         output = os.getenv("NEWSREEL_OUTPUT_DIR")
-        workflow = os.getenv("NEWSREEL_H3_API_WORKFLOW")
         return cls(
             project_root=root,
             output_dir=_resolve_path(output, root) if output else root / "output",
@@ -77,12 +75,11 @@ class Settings:
                 "/"
             ),
             agnes_text_model=os.getenv("AGNES_TEXT_MODEL", "agnes-2.5-flash"),
-            agnes_image_model=os.getenv("AGNES_IMAGE_MODEL", "agnes-image-2.1-flash"),
+            agnes_image_model=os.getenv("AGNES_IMAGE_MODEL", "agnes-image-2.5-flash"),
             agnes_image_size=os.getenv("AGNES_IMAGE_SIZE", "768x1344"),
             agnes_timeout_seconds=int(os.getenv("AGNES_TIMEOUT_SECONDS", "180")),
             modal_app_name=os.getenv("NEWSREEL_MODAL_APP", "newsreel-fasth3"),
             modal_function_name=os.getenv("NEWSREEL_MODAL_FUNCTION", "render_h3_batch"),
-            h3_workflow_path=_resolve_path(workflow, root) if workflow else None,
         )
 
     def resolved_ffmpeg(self) -> str | None:

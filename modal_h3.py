@@ -1,14 +1,11 @@
-"""Modal entrypoint: one L40S container and one ComfyUI server per three-clip batch.
-
-The exact validated ComfyUI API workflow is supplied by the local bridge through
-NEWSREEL_H3_API_WORKFLOW. It is intentionally not replaced by a guessed graph.
-"""
+"""Modal entrypoint: one L40S container and one in-code FastH3/ComfyUI graph per JT batch."""
 
 from __future__ import annotations
 
+import base64
 import json
 import os
-import shutil
+import re
 import subprocess
 import sys
 import time
@@ -19,36 +16,81 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from newsreel.comfy_workflow import patch_api_workflow, validate_api_workflow
+from newsreel.h3_workflow import (
+    H3_DURATION_SECONDS,
+    H3_FPS,
+    H3_FRAMES,
+    H3_HEIGHT,
+    H3_MODAL_CPU,
+    H3_MODAL_GPU,
+    H3_MODAL_MEMORY_MIB,
+    H3_MODAL_TIMEOUT_SECONDS,
+    H3_MODEL_FILES,
+    H3_STEPS,
+    H3_VOLUME_NAME,
+    H3_WIDTH,
+    build_h3_api_workflow,
+    h3_contract_config,
+)
 
 COMFYUI_DIR = Path(os.getenv("NEWSREEL_COMFYUI_DIR", "/opt/ComfyUI"))
 MODELS_ROOT = Path("/mnt/fasth3-models")
 COMFY_API = "http://127.0.0.1:8188"
+COMFYUI_REPOSITORY = "https://github.com/Comfy-Org/ComfyUI.git"
 
 
 def validate_batch(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if payload.get("contract_version") != 1:
         raise ValueError("Version de contrat H3 non prise en charge.")
-    expected = {
-        "width": 768,
-        "height": 1344,
-        "fps": 24,
-        "frames": 243,
-        "duration_seconds": 10.125,
-        "steps": 8,
-        "native_audio": True,
-        "video_sparse_attention": True,
-    }
-    config = payload.get("config", {})
-    for key, value in expected.items():
+    if "workflow" in payload:
+        raise ValueError(
+            "Le graphe FastH3 est construit dans le code du worker; aucun JSON workflow externe n'est accepté."
+        )
+    config = payload.get("config")
+    expected_config = h3_contract_config()
+    if not isinstance(config, dict):
+        raise ValueError("Configuration FastH3 absente du batch.")
+    for key, value in expected_config.items():
         if config.get(key) != value:
             raise ValueError(f"Paramètre FastH3 requis invalide: {key}={config.get(key)!r}.")
+    if set(config) != set(expected_config):
+        raise ValueError("Le contrat FastH3 contient des paramètres inconnus.")
+
+    run_id = payload.get("run_id")
+    if not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", run_id):
+        raise ValueError("Identifiant de run invalide pour le batch FastH3.")
     jobs = payload.get("jobs")
     if not isinstance(jobs, list) or not 1 <= len(jobs) <= 6:
         raise ValueError("Le worker Modal accepte un batch de un à six reporters.")
-    if not isinstance(payload.get("workflow"), dict):
-        raise ValueError("Export JSON de workflow ComfyUI absent du batch.")
-    validate_api_workflow(payload["workflow"])
+
+    required_per_job = {
+        "width": H3_WIDTH,
+        "height": H3_HEIGHT,
+        "fps": H3_FPS,
+        "frames": H3_FRAMES,
+        "duration_seconds": H3_DURATION_SECONDS,
+        "steps": H3_STEPS,
+    }
+    seen_ids: set[str] = set()
+    for index, job in enumerate(jobs):
+        if not isinstance(job, dict):
+            raise ValueError(f"Job reporter #{index + 1} invalide.")
+        job_id = job.get("id")
+        if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", job_id):
+            raise ValueError(f"Identifiant invalide pour le job reporter #{index + 1}.")
+        if job_id in seen_ids:
+            raise ValueError(f"Identifiant de job reporter dupliqué: {job_id}.")
+        seen_ids.add(job_id)
+        if not isinstance(job.get("prompt"), str) or not job["prompt"].strip():
+            raise ValueError(f"Prompt vide pour le job reporter {job_id}.")
+        if not isinstance(job.get("image_base64"), str) or not job["image_base64"]:
+            raise ValueError(f"Image base64 absente pour le job reporter {job_id}.")
+        for key, expected in required_per_job.items():
+            if job.get(key) != expected:
+                raise ValueError(f"Paramètre FastH3 requis invalide pour {job_id}: {key}.")
+        seed = job.get("seed")
+        if not isinstance(seed, int) or not 0 <= seed < 2**53:
+            raise ValueError(f"Seed invalide pour le job reporter {job_id}.")
     return jobs
 
 
@@ -120,7 +162,8 @@ def _history_video(prompt_id: str) -> tuple[bytes | None, str | None]:
         if not isinstance(output, dict):
             continue
         for key in ("videos", "gifs", "files"):
-            for item in output.get(key, []) if isinstance(output.get(key, []), list) else []:
+            items = output.get(key, [])
+            for item in items if isinstance(items, list) else []:
                 if not isinstance(item, dict):
                     continue
                 filename = str(item.get("filename", ""))
@@ -158,8 +201,8 @@ def _wait_for_video(prompt_id: str, timeout_seconds: int = 1200) -> tuple[bytes,
 def _mount_volume_models() -> None:
     if not MODELS_ROOT.is_dir():
         raise RuntimeError(
-            "Volume Modal fasth3-models vide ou non monté à /mnt/fasth3-models. "
-            "Réutilisez le volume du smoke FastH3."
+            f"Volume Modal {H3_VOLUME_NAME} vide ou non monté à {MODELS_ROOT}. "
+            "Le worker ne télécharge ni ne remplace les modèles H3."
         )
     target_root = COMFYUI_DIR / "models"
     target_root.mkdir(parents=True, exist_ok=True)
@@ -171,34 +214,42 @@ def _mount_volume_models() -> None:
         "clip",
         "checkpoints",
     )
-    linked = 0
     for category in categories:
         target = target_root / category
-        if target.exists() and not target.is_symlink():
-            has_weights = target.is_dir() and any(target.rglob("*.safetensors"))
-            if has_weights:
-                continue
+        if target.is_symlink():
+            continue
+        if target.exists():
+            if target.is_dir() and any(target.iterdir()):
+                raise RuntimeError(
+                    f"Répertoire ComfyUI {category} déjà peuplé hors du volume; "
+                    "le worker refuse d'utiliser des poids différents de fasth3-models."
+                )
             if target.is_dir():
-                shutil.rmtree(target)
+                target.rmdir()
             else:
                 target.unlink()
-        if target.exists() or target.is_symlink():
-            continue
-        candidates = [p for p in MODELS_ROOT.rglob(category) if p.is_dir()]
-        if (MODELS_ROOT / category).is_dir():
-            source = MODELS_ROOT / category
-        elif candidates:
+        candidates = [path for path in MODELS_ROOT.rglob(category) if path.is_dir()]
+        source = MODELS_ROOT / category if (MODELS_ROOT / category).is_dir() else None
+        if source is None and candidates:
             source = candidates[0]
-        else:
-            continue
-        target.symlink_to(source, target_is_directory=True)
-        linked += 1
-    for category in ("diffusion_models", "text_encoders", "vae"):
-        directory = target_root / category
-        if not directory.is_dir() or not any(directory.rglob("*.safetensors")):
-            raise RuntimeError(f"Poids FastH3/H3 manquants dans le volume: {category}.")
-    if not linked and not any((target_root / name).is_symlink() for name in categories):
-        raise RuntimeError("Impossible de relier les dossiers de modèles du volume fasth3-models.")
+        if source is not None:
+            target.symlink_to(source, target_is_directory=True)
+
+    model_locations = (
+        ("diffusion_models", H3_MODEL_FILES["unet"]),
+        ("text_encoders", H3_MODEL_FILES["clip"]),
+        ("vae", H3_MODEL_FILES["video_vae"]),
+        ("vae", H3_MODEL_FILES["audio_vae"]),
+    )
+    missing = [
+        f"{category}/{filename}"
+        for category, filename in model_locations
+        if not (target_root / category / filename).is_file()
+    ]
+    if missing:
+        raise RuntimeError(
+            "Poids FastH3 exacts absents du volume fasth3-models: " + ", ".join(missing)
+        )
 
 
 def _start_comfyui() -> subprocess.Popen[bytes]:
@@ -215,6 +266,7 @@ def _start_comfyui() -> subprocess.Popen[bytes]:
         "--port",
         "8188",
         "--disable-auto-launch",
+        "--disable-comfy-compiler",
     ]
     process = subprocess.Popen(
         command,
@@ -243,27 +295,26 @@ def _run_batch(payload: dict[str, Any]) -> dict[str, Any]:
     process = _start_comfyui()
     videos: dict[str, dict[str, str]] = {}
     generation_start = time.perf_counter()
+    run_id = payload["run_id"]
     try:
+        # Keep one ComfyUI process and the exact same model-loader node IDs for every reporter.
         for job in jobs:
-            job_id = str(job.get("id", ""))
-            if not job_id or not job.get("image_base64") or not job.get("prompt"):
-                raise ValueError("Job reporter incomplet: id, image_base64 et prompt requis.")
-            import base64
-
+            job_id = job["id"]
             try:
                 image_bytes = base64.b64decode(job["image_base64"], validate=True)
             except ValueError as exc:
                 raise ValueError(f"Image base64 invalide pour {job_id}.") from exc
-            image_path = COMFYUI_DIR / "input" / f"newsreel-{uuid.uuid4().hex}.png"
+            image_path = (
+                COMFYUI_DIR / "input" / f"newsreel-{run_id}-{job_id}-{uuid.uuid4().hex}.png"
+            )
             image_path.parent.mkdir(parents=True, exist_ok=True)
             image_path.write_bytes(image_bytes)
             try:
                 uploaded_image = _upload_image(image_path)
-                workflow = patch_api_workflow(
-                    payload["workflow"],
+                workflow = build_h3_api_workflow(
                     job,
                     uploaded_image,
-                    f"newsreel/{job_id}-{uuid.uuid4().hex[:8]}",
+                    f"newsreel/{run_id}/{job_id}",
                 )
                 queued = _http_json(f"{COMFY_API}/prompt", {"prompt": workflow}, timeout=60)
                 prompt_id = str(queued.get("prompt_id", ""))
@@ -275,14 +326,11 @@ def _run_batch(payload: dict[str, Any]) -> dict[str, Any]:
                         f"Le workflow FastH3 doit produire un MP4, reçu: {source_name}."
                     )
                 videos[job_id] = {
-                    "filename": f"{job_id}{Path(source_name).suffix.lower() or '.mp4'}",
+                    "filename": f"{job_id}.mp4",
                     "data_base64": base64.b64encode(content).decode("ascii"),
                 }
             finally:
-                try:
-                    image_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
+                image_path.unlink(missing_ok=True)
     finally:
         if process.poll() is None:
             process.terminate()
@@ -307,7 +355,7 @@ except ImportError:  # Local/offline tests do not install Modal or contact the G
 
 if modal is not None:
     app = modal.App("newsreel-fasth3")
-    models_volume = modal.Volume.from_name("fasth3-models", create_if_missing=False)
+    models_volume = modal.Volume.from_name(H3_VOLUME_NAME, create_if_missing=False)
     comfy_image = (
         modal.Image.debian_slim(python_version="3.11")
         .add_local_python_source("newsreel")
@@ -317,7 +365,7 @@ if modal is not None:
             index_url="https://download.pytorch.org/whl/cu128",
         )
         .run_commands(
-            "git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI",
+            f"git clone --depth 1 {COMFYUI_REPOSITORY} /opt/ComfyUI",
             "pip install --no-cache-dir -r /opt/ComfyUI/requirements.txt",
         )
         .env({"NEWSREEL_COMFYUI_DIR": "/opt/ComfyUI"})
@@ -325,13 +373,16 @@ if modal is not None:
 
     @app.function(
         image=comfy_image,
-        gpu="L40S",
-        timeout=5400,
-        concurrency_limit=1,
+        gpu=H3_MODAL_GPU,
+        cpu=H3_MODAL_CPU,
+        memory=H3_MODAL_MEMORY_MIB,
+        timeout=H3_MODAL_TIMEOUT_SECONDS,
+        max_containers=1,
+        single_use_containers=True,
         volumes={str(MODELS_ROOT): models_volume},
     )
     def render_h3_batch(payload: dict[str, Any]) -> dict[str, Any]:
-        """Render three reporter clips in one L40S container and one ComfyUI lifetime."""
+        """Render all reporter clips sequentially in one disposable L40S/ComfyUI worker."""
         return _run_batch(payload)
 else:
     app = None
