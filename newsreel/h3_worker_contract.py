@@ -74,12 +74,14 @@ def build_host_prompt(
     spoken_text = segment.host_dialogue.strip()
     if not spoken_text:
         raise ValueError(f"Le dialogue host {segment.id} est vide.")
+    intensity = scenario.creative.get("intensity", "strong")
     creative = build_host_video_prompt(
         scenario.to_dict(),
         segment.to_dict(),
         director,
         palette,
         H3_DURATION_SECONDS,
+        intensity,
     )
     return creative + "\n" + _stability_block("studio host")
 
@@ -88,6 +90,7 @@ def build_reporter_prompt(
     segment: Segment,
     director: str = DEFAULT_DIRECTOR,
     palette: str = DEFAULT_PALETTE,
+    intensity: str = "strong",
 ) -> str:
     spoken_text = segment.reporter_dialogue.strip()
     if not spoken_text:
@@ -97,6 +100,7 @@ def build_reporter_prompt(
         director,
         palette,
         H3_DURATION_SECONDS,
+        intensity,
     )
     return creative + "\n" + _stability_block("field reporter")
 
@@ -146,7 +150,10 @@ def create_h3_jobs(
                 image_path=reporter_image,
                 dialogue=segment.reporter_dialogue,
                 prompt=build_reporter_prompt(
-                    segment, selected_director, selected_palette
+                    segment,
+                    selected_director,
+                    selected_palette,
+                    scenario.creative.get("intensity", "strong"),
                 ),
                 duration_seconds=settings.h3_duration_seconds,
                 width=settings.h3_width,
@@ -197,6 +204,31 @@ class ModalH3Renderer:
     def __init__(self, app_name: str, function_name: str):
         self.app_name = app_name
         self.function_name = function_name
+
+    def check_available(self) -> None:
+        """Resolve the deployed Modal function without allocating a GPU container."""
+        try:
+            import modal
+        except ImportError as exc:
+            raise H3RendererError(
+                "Le client Modal n'est pas installé. Lancez: pip install -r requirements-modal.txt"
+            ) from exc
+        try:
+            remote = modal.Function.from_name(self.app_name, self.function_name)
+            try:
+                remote.info(refresh=True)
+            except TypeError:
+                try:
+                    remote.info()
+                except Exception:
+                    remote.hydrate()
+            except AttributeError:
+                remote.hydrate()
+        except Exception as exc:
+            raise H3RendererError(
+                f"Déploiement Modal introuvable ou inaccessible: "
+                f"{self.app_name}.{self.function_name}: {exc}"
+            ) from exc
 
     def render_batch(self, jobs: list[H3Job], run_id: str | None = None) -> H3BatchResult:
         payload = encode_batch(jobs, run_id or uuid.uuid4().hex)
