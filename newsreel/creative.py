@@ -512,7 +512,7 @@ def build_reporter_video_prompt(
             f"FULL VISUAL GAG: {segment.get('scene_action', '')}",
             "All characters are active. The reporter has a concrete comic problem caused by the news-related situation.",
             "COMEDIC STRUCTURE: 1) establish the bizarre situation; 2) escalate physically; 3) reporter tries to maintain journalistic seriousness; 4) the gag peaks; 5) reporter delivers the punchline while the visual chaos continues.",
-            f'CRITICAL DIALOGUE RULE: the reporter MUST NOT repeat the host, headline, summary, numbers, names, dates or factual explanation. The reporter says only this scene-dependent joke: "{line}"',
+            "CRITICAL DIALOGUE RULE: the reporter MUST NOT repeat the host, headline, summary, numbers, names, dates or factual explanation. The reporter says only the single scene-dependent joke provided in the <d> block below.",
             f"CAMERA: {camera_plan}; {d['camera']}",
             f"STYLE: {d['style']}",
             f"LIGHTING: {d['lighting']}",
