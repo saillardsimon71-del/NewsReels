@@ -14,7 +14,9 @@ from .creative import (
     DEFAULT_INTENSITY,
     apply_creative_postprocessing,
     build_scenario_prompt,
+    silent_tail_seconds,
 )
+from .h3_workflow import h3_frames_for_dialogue
 from .models import NewsItem, Scenario
 
 
@@ -83,8 +85,9 @@ class AgnesClient:
         if not 1 <= count <= 7:
             raise AgnesError("Le nombre de sujets doit être compris entre 1 et 7.")
         prompt = build_scenario_prompt(news, count, director, palette, intensity)
-        available = {item.title: item for item in news if item.title}
+        available = {item.title.replace("\u2019", "'"): item for item in news if item.title}
         last_error: Exception | None = None
+        invalid_content = ""
 
         for attempt in range(2):
             correction = ""
@@ -95,16 +98,22 @@ class AgnesClient:
                     f"Return a completely valid replacement with EXACTLY {count} distinct segments, "
                     "each using one exact supplied HEADLINE and no invented factual claim."
                 )
+            messages = [
+                {"role": "system", "content": "You are a French satirical news writer and cinematic director. Return valid JSON only. Spoken dialogue must be short, idiomatic French. All visual descriptions, physical actions and camera directions must be concise English. Copy source headlines exactly. Follow the first-frame face safety and timing constraints."},
+                {"role": "user", "content": prompt + correction},
+            ]
+            if invalid_content:
+                messages.extend([
+                    {"role": "assistant", "content": invalid_content},
+                    {"role": "user", "content": correction + " Repair the draft above, retaining its valid facts and ideas. Shorten only the fields that violate constraints."},
+                ])
             response = self._request(
                 "chat/completions",
                 {
                     "model": self.settings.agnes_text_model,
                     "temperature": 0.65 if attempt == 0 else 0.35,
                     "response_format": {"type": "json_object"},
-                    "messages": [
-                        {"role": "system", "content": "Réponds uniquement avec du JSON valide."},
-                        {"role": "user", "content": prompt + correction},
-                    ],
+                    "messages": messages,
                 },
             )
             try:
@@ -115,6 +124,7 @@ class AgnesClient:
                         for part in content
                     )
                 text = str(content).strip()
+                invalid_content = text
                 text = re.sub(r"^\`\`\`(?:json)?\s*|\s*\`\`\`$", "", text, flags=re.IGNORECASE)
                 raw_value = json.loads(text)
                 if not isinstance(raw_value, dict):
@@ -129,7 +139,9 @@ class AgnesClient:
                 scenario = Scenario.from_mapping(value)
                 seen_titles: set[str] = set()
                 for segment in scenario.segments:
-                    match = available.get(segment.title) or available.get(segment.source_title)
+                    h3_frames_for_dialogue(segment.host_dialogue)
+                    h3_frames_for_dialogue(segment.reporter_dialogue, visual_seconds=5, tail_seconds=silent_tail_seconds(segment.to_dict()))
+                    match = available.get(segment.title.replace("\u2019", "'")) or available.get(segment.source_title.replace("\u2019", "'"))
                     if match is None:
                         raise ValueError(
                             f"headline non fourni par Google News: {segment.title!r}"

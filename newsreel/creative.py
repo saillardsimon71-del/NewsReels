@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import re
 from copy import deepcopy
 from typing import Any
 
@@ -19,12 +21,12 @@ INTENSITY_RULES = {
         "clean staging and deadpan performances. Do not remove the retrofuturist identity."
     ),
     "moderate": (
-        "Clear comic escalation: one main gag plus secondary visual beats, expressive blocking "
-        "and purposeful camera movement while preserving readability and character stability."
+        "Clear comic escalation: a scene-specific gag, expressive blocking and purposeful "
+        "camera movement while preserving readability and character stability."
     ),
     "strong": (
-        "Bold cinematic escalation: dense but readable retrofuturist spectacle, several coordinated "
-        "visual beats, stronger reactions and ambitious camera language without chaotic identity drift."
+        "Bold cinematic satire: an immediately readable absurd situation, committed reactions "
+        "and a strong final payoff. Be inventive in staging, not in the number of simultaneous actions."
     ),
 }
 
@@ -90,7 +92,7 @@ DEFAULT_HOST = {
 DEFAULT_HOST_FALLBACK_ACTION = "the host turns a giant chrome crank and the studio walls split open to reveal a cityscape while paper birds fly out"
 DEFAULT_REPORTER = {"name": "Reporter", "description": "grey trench coat, black umbrella, round glasses", "dialogue": ""}
 DEFAULT_SCENE_ACTION = "the reporter and the people on set perform an incredible synchronized choreography while smoke fills the frame"
-DEFAULT_CAMERA_PLAN = "Opening wide shot, then cuts to close-ups, shot-reverse-shot between reporter and people, ending on a wide symmetrical frame."
+DEFAULT_CAMERA_PLAN = ""
 DEFAULT_LOCATION = "location, symmetrical, chrome arches, concrete textures"
 DEFAULT_EMOTION = "spectaculaire"
 DEFAULT_REPORTER_DIALOGUE_FALLBACK = "Même ma machine à café aurait demandé une mutation."
@@ -144,6 +146,60 @@ def creative_catalog() -> dict[str, Any]:
     }
 
 
+def camera_direction(segment: dict[str, Any], role: str) -> str:
+    plan = segment.get("camera_plan")
+    # Legacy prose was never sent to H3 and can request unsafe wide opening shots.
+    return str(plan.get(role, "")).strip() if isinstance(plan, dict) else ""
+
+
+def silent_tail_seconds(segment: dict[str, Any]) -> float:
+    plan = segment.get("camera_plan")
+    value = plan.get("silent_tail_seconds", 0) if isinstance(plan, dict) else 0
+    if type(value) not in {int, float} or not math.isfinite(value) or not 0 <= value <= 3:
+        raise ValueError("camera_plan.silent_tail_seconds doit être un nombre entre 0 et 3.")
+    return float(value)
+
+
+def validate_staging(segment: dict[str, Any], host: dict[str, Any] | None = None) -> None:
+    plan = segment.get("camera_plan")
+    silent_tail_seconds(segment)
+    fields = [segment.get("host_action", ""), segment.get("scene_action", "")]
+    if host:
+        fields.extend([host.get("name", ""), host.get("host_action", "")])
+    if isinstance(plan, dict):
+        fields.extend([plan.get("host", ""), plan.get("reporter", "")])
+    for person in segment.get("people") or []:
+        if isinstance(person, dict):
+            fields.extend([person.get("name", ""), person.get("role", "")])
+            if isinstance(person.get("stanislavski"), dict):
+                fields.append(person["stanislavski"].get("physical_action", ""))
+    reporter = segment.get("reporter") or {}
+    fields.append(reporter.get("name", ""))
+    lines = [str(segment.get("host_dialogue", "")).strip(), str(reporter.get("dialogue", "")).strip()]
+    if isinstance(plan, dict):
+        if any(isinstance(person, dict) and person.get("name") == reporter.get("name") for person in segment.get("people") or []):
+            raise ValueError("Le reporter ne doit pas être dupliqué comme personnage secondaire.")
+        if len(re.findall(r"\w+(?:['\u2019-]\w+)*", lines[1])) > 18:
+            raise ValueError("Raccourcir le dialogue reporter à 18 mots maximum, sans couper les mots.")
+        for role in ("host", "reporter"):
+            direction = str(plan.get(role, ""))
+            opening = re.split(r"[.;]|\b(?:then|after speech|after speaking)\b", direction, maxsplit=1, flags=re.IGNORECASE)[0]
+            if opening.lower().strip().startswith(("never ", "no ", "avoid ", "do not ")):
+                continue
+            if re.search(r"\b(?:wide|establishing|full.body|long)\s+(?:shot|view|frame)|(?:open\w*|start\w*|begin\w*).{0,30}(?:wide|full.body|long.shot)", opening, re.IGNORECASE):
+                raise ValueError("Le cadrage initial du visage parlant doit rester serré.")
+    for line in lines:
+        if re.search(r"<[^>]*>|\(S\d+\)", line):
+            raise ValueError("Le dialogue doit être du texte parlé sans balise H3.")
+    for text in fields:
+        if not isinstance(text, str):
+            raise ValueError("Les actions et directions caméra doivent être du texte.")
+        if re.search(r"<[^>]*>|\(S\d+\)", text) or any(line and line in text for line in lines):
+            raise ValueError("Les champs de mise en scène ne doivent pas contenir de dialogue.")
+        if isinstance(plan, dict) and len(text.split()) > 70:
+            raise ValueError("Simplifier chaque champ de mise en scène à 70 mots maximum.")
+
+
 def build_scenario_prompt(
     news_items: list[Any],
     seg_count: int,
@@ -154,116 +210,51 @@ def build_scenario_prompt(
     d = _director(director)
     p = _palette(palette)
     intensity_rule = _intensity(intensity)
-
-    news_blocks: list[str] = []
+    news_blocks = []
     for index, item in enumerate(news_items[:20], start=1):
         title = _news_field(item, "title")
         if not title:
             continue
-        source = _news_field(item, "source") or "Source non précisée"
-        published = _news_field(item, "published") or "Date non précisée"
-        context = _news_field(item, "summary") or "Aucun contexte supplémentaire fourni."
-        if len(context) > 1200:
-            context = context[:1197].rstrip() + "..."
-        news_blocks.append(
-            "\n".join(
-                [
-                    f"[NEWS {index}]",
-                    f"HEADLINE: {title}",
-                    f"SOURCE: {source}",
-                    f"PUBLISHED: {published}",
-                    f"CONTEXT: {context}",
-                ]
-            )
-        )
-    news_list = "\n\n".join(news_blocks)
-    return "\n".join(
-        [
-            "You are the head writer of a short-form satirical TV news show based on TODAY'S NEWS.",
-            "",
-            "CORE FORMAT — EVERY SEGMENT IS A COMPLETE COMEDIC SKETCH:",
-            "- The HOST on the TV studio explains the actual news clearly and briefly.",
-            "- The FIELD REPORTER MUST NOT repeat, paraphrase, restate, summarize, or give the same information as the host.",
-            "- The field reporter says ONE original funny sentence inspired by the news AND by the absurd physical situation happening around them.",
-            "- The reporter sentence is a punchline, observation, ironic reaction, deadpan joke, or comic metaphor. It must make sense only because of the scene.",
-            "- Host and reporter dialogue must be clearly different in content and purpose.",
-            "- The visual action must create a comic situation that gives the reporter a reason to say the joke.",
-            "- Each clip must feel like a self-contained sketch with setup → escalation → visual gag → punchline.",
-            "",
-            "NEWS SOURCES (Google News, today):",
-            news_list,
-            "",
-            "ABSOLUTE FACT RULE:",
-            "- headline: copy the EXACT selected HEADLINE verbatim.",
-            "- Use ONLY the supplied HEADLINE / SOURCE / PUBLISHED / CONTEXT blocks for factual claims.",
-            "- summary: only facts supported by the selected news block. Never invent numbers, names, dates or events.",
-            "- Write visual descriptions and physical actions in English; spoken dialogue stays verbatim in French.",
-            "- host_dialogue: factual TV-news statement based on the summary, 8-16 French words.",
-            "- reporter.dialogue: NOT factual repetition. Exactly one funny French sentence, 8-18 words, reacting to the physical gag.",
-            "",
-            "COMEDIC CONSTRUCTION FOR EVERY SEGMENT:",
-            "- Give the reporter a concrete comic problem caused by the news-related situation.",
-            "- Make 3-5 secondary characters actively worsen the situation in a visually readable way.",
-            "- The gag must be physical, safe, surreal and immediately understandable without subtitles.",
-            "- The reporter remains committed as if this were serious journalism.",
-            "- The joke must be different for every segment.",
-            '- Avoid generic jokes such as "cest le chaos", "je ne sais plus quoi dire", "on est en direct" or simple repetition of the headline.',
-            "",
-            f"CREATIVE INTENSITY — {INTENSITY_LEVELS[intensity].upper()}:",
-            intensity_rule,
-            "",
-            "VISUAL WORLD — MANDATORY FOR ALL CHARACTERS AND SETS:",
-            "- Every human character wears a clearly retrofuturistic, funny, extravagant costume appropriate to their role: oversized collars, strange helmets, chrome accessories, absurd pockets, geometric shoulder pieces, unusual glasses, inflatable details, retro sci-fi fabrics or ridiculous functional gadgets.",
-            "- No ordinary modern clothing unless transformed into a comic retrofuturist version.",
-            "- Every location is visually hallucinatory: impossible architecture, oversized props, surreal machines, strange signage without readable text, bizarre furniture, giant objects related to the news, unusual scale relationships.",
-            "- Images must be richly colored and visually exuberant. NEVER default to grey, desaturated, monochrome, beige or bland realism.",
-            "- The selected palette below is the ONLY color-direction source. Do not invent another palette.",
-            "",
-            "STANISLAVSKI:",
-            "- Every character has objective, obstacle, given_circumstances and physical_action.",
-            "- Performances are committed and serious even when the situation is ridiculous.",
-            "",
-            f"DIRECTOR / VISUAL GRAMMAR — {d['label'].upper()}:",
-            d["style"],
-            f"Camera: {d['camera']}",
-            f"Lighting: {d['lighting']}",
-            f"Film: {d['film']}",
-            "",
-            f"COLOR PALETTE — {p['label'].upper()}:",
-            p["full"],
-            "Use this exact chromatic family throughout the image. No grayscale fallback.",
-            "",
-            "SOUND:",
-            "- No music or soundtrack.",
-            "- Only diegetic foley and environmental sound plus birds in every shot.",
-            "",
-            "OUTPUT JSON — ONLY JSON, no markdown:",
-            "{",
-            '  "jt_title": "Le JT de NewsReel — [theme]",',
-            '  "host": {"name":"...","description":"detailed retrofuturistic funny outfit","plateau":"hallucinatory retrofuturistic TV set","host_action":"recurring visual gag that supports each news item","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},',
-            '  "segments": [',
-            "    {",
-            '      "segment_number": 1,',
-            '      "headline": "EXACT selected headline",',
-            '      "summary": "supported factual summary",',
-            '      "host_dialogue": "8-16 French words stating the actual news",',
-            '      "host_action": "specific visual studio gag tied to this news",',
-            '      "people": [',
-            '        {"name":"...","description":"retro-futuristic funny costume + physical traits","role":"news-related role","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},',
-            '        {"name":"...","description":"...","role":"...","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},',
-            '        {"name":"...","description":"...","role":"...","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}}',
-            "      ],",
-            '      "location": "hallucinatory retrofuturistic location tied to the news",',
-            '      "scene_action": "continuous visual sketch: setup, escalation, absurd gag, reporter predicament, punchline moment",',
-            '      "camera_plan": "one continuous medium shot with the reporter face clearly visible; wide views for scenery or inserts only",',
-            '      "reporter": {"name":"...","description":"retro-futuristic funny outfit","dialogue":"8-18 French words: ONE original joke about the scene, NOT the news facts"},',
-            '      "emotion": "one word"',
-            "    }",
-            "  ]",
-            "}",
-            f"Exactly {seg_count} segments. Every segment is a distinct sketch. Do not repeat reporter joke structures.",
-        ]
-    )
+        context = _news_field(item, "summary")[:1200] or "No additional context provided."
+        news_blocks.append("\n".join([
+            f"[NEWS {index}]",
+            f"HEADLINE: {title}",
+            f"SOURCE: {_news_field(item, 'source') or 'Unspecified'}",
+            f"PUBLISHED: {_news_field(item, 'published') or 'Unspecified'}",
+            f"CONTEXT: {context}",
+        ]))
+    return "\n".join([
+        "Write a social-first satirical French TV news show. Return JSON only.",
+        "LANGUAGE: titles and spoken dialogue in French. ALL visual fields and directing notes in English.",
+        "CORE FORMAT — EVERY SEGMENT IS A COMPLETE COMEDIC SKETCH:",
+        "Host: immediate factual hook, one natural French sentence, 8-16 words. Reporter: one original satirical punchline, 8-18 words, about the physical situation. Never repeat the host's facts or joke structures.",
+        "ABSOLUTE FACT RULE:",
+        "Copy the EXACT selected HEADLINE verbatim. Facts come ONLY from the supplied HEADLINE / SOURCE / PUBLISHED / CONTEXT. No invented names, numbers or events. Select distinct news events, not several articles about the same story.",
+        "NEWS SOURCES:",
+        "\n\n".join(news_blocks),
+        "COMEDIC CONSTRUCTION FOR EVERY SEGMENT:",
+        "Invent a specific satirical situation grounded in the news: expose its hypocrisy, incentives or institutional absurdity through a visible setup, readable escalation and strong final payoff. A decorative spectacle alone is not a joke. One main physical gag, a small supporting cast only if useful. people contains secondary characters only, NEVER the reporter. Perform with complete journalistic seriousness.",
+        "You are the director. Invent camera moves, transitions, gags and endings freely according to the scene; no closed menu. Choose one or two purposeful camera moves, not a catalogue of instructions.",
+        "H3 GUARDRAILS:",
+        "Each clip lasts about 5-15 seconds. The edit alternates host and reporter shots. Every opening shows the principal speaker's face in a medium close-up, NEVER starts on a prop. Keep that face large and unobstructed while speaking. Wide views may show scenery, extras or silent action after speech.",
+        "camera_plan.host and camera_plan.reporter are concise English directing notes. Describe coherent progression and payoff. Subjective camera directions move the viewpoint itself; do not accidentally invent another filming device or second camera. Keep supporting crew silent.",
+        "camera_plan.silent_tail_seconds: 0-3 seconds reserved AFTER the reporter's line for the chosen silent ending. Budget enough time for the ending without rushing speech.",
+        "host_action / scene_action: concise physical comedy only, no camera instructions or dialogue. reporter_image_prompt: static initial pose and props BEFORE escalation, no montage, no framing instructions. Costumes must leave the face unobstructed: no tinted visor, mask or opaque glasses.",
+        "Aim for 20-40 words per action/camera note, maximum 70. No speech tags, repeated dialogue, extra speakers, generated subtitles, logos, readable signs or music. Quiet diegetic sound only.",
+        "VISUAL WORLD — MANDATORY FOR ALL CHARACTERS AND SETS:",
+        "Funny retrofuturist costumes, surreal news-related props, hallucinatory sets. Rich color; never grey, monochrome or bland beige. Stage spectacle around the foreground face, not by moving the speaker far away.",
+        "STANISLAVSKI: objective, obstacle, given_circumstances, physical_action for characters. Keep physical actions simple and coordinated.",
+        f"CREATIVE INTENSITY — {INTENSITY_LEVELS[intensity].upper()}:",
+        intensity_rule,
+        f"DIRECTOR / VISUAL GRAMMAR — {d['label'].upper()}:",
+        d["style"],
+        f"Camera inspiration, not a required shot list: {d['camera']}",
+        f"Lighting: {d['lighting']} Film: {d['film']}",
+        f"COLOR PALETTE — {p['label'].upper()}: {p['full']}",
+        "OUTPUT JSON:",
+        '{"jt_title":"French title","host":{"name":"...","description":"English costume","plateau":"English set","host_action":"simple recurring physical action","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},"segments":[{"headline":"EXACT supplied headline","summary":"supported factual summary","host_dialogue":"8-16 French words","host_action":"English physical gag","people":[{"name":"...","description":"English costume","role":"...","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"English action"}}],"location":"English set","scene_action":"English physical sketch","reporter_image_prompt":"English static initial setup","camera_plan":{"host":"English studio direction","reporter":"English field direction and payoff","silent_tail_seconds":0},"reporter":{"name":"...","description":"English costume","dialogue":"8-18 natural French words"},"emotion":"..."}]}',
+        f"Exactly {seg_count} segments. Before returning, verify English visual fields, grammatical French dialogue within word budgets, safe first-frame faces, achievable action and a sharp ending. Simplify visuals rather than rush speech.",
+    ])
 
 
 def apply_creative_postprocessing(
@@ -321,7 +312,7 @@ def apply_creative_postprocessing(
         if not segment.get("location"):
             segment["location"] = DEFAULT_LOCATION
         people = segment.get("people")
-        if not isinstance(people, list) or not people:
+        if not isinstance(people, list):
             segment["people"] = deepcopy(DEFAULT_PEOPLE)
             people = segment["people"]
 
@@ -332,6 +323,7 @@ def apply_creative_postprocessing(
         if not reporter_dialogue or reporter_dialogue == host_dialogue:
             reporter_dialogue = DEFAULT_REPORTER_DIALOGUE_FALLBACK
         reporter["dialogue"] = reporter_dialogue
+        validate_staging(segment, host)
 
         description = str(reporter.get("description", "")).strip()
         if description and "retro" not in description.lower() and "futur" not in description.lower():
@@ -370,14 +362,13 @@ def build_image_style_block(
     return "\n".join(
         [
             f"VISUAL STYLE: {d['style']}",
-            f"CAMERA LANGUAGE: {d['camera']}",
             f"LIGHTING: {d['lighting']}",
             f"IMAGE TEXTURE: {d['film']}",
             f"COLOR RULE — ONLY THIS PALETTE: {p['full']}",
             f"CREATIVE INTENSITY: {intensity_rule}",
             "MANDATORY COLOR SATURATION: strong chromatic presence across costumes, architecture, props, lighting and background. Never grey, never monochrome, never desaturated, never bland beige.",
-            "MANDATORY CHARACTER DESIGN: every person wears a funny retrofuturistic costume with exaggerated silhouettes, chrome/plastic accessories, unusual glasses, helmets, geometric panels, absurd gadgets and period-future details.",
-            "MANDATORY SET DESIGN: hallucinatory retrofuturist environment, impossible architecture, oversized props related to the news, strange machines, surreal scale, visually dense but readable.",
+            "MANDATORY CHARACTER DESIGN: funny retrofuturistic costume; accessories must leave the face unobstructed.",
+            "MANDATORY SET DESIGN: colorful hallucinatory retrofuturist setting, visible only as a background around the foreground face.",
             "Photographic/cinematic image according to the selected visual style. No generic modern studio look.",
             "NO readable text, NO watermark, NO logos.",
         ]
@@ -393,12 +384,11 @@ def build_host_image_prompt(
     return "\n".join(
         [
             "KEYFRAME FOR A COMEDIC TV NEWS SKETCH.",
+            "FIRST FRAME: medium close-up, head and shoulders filling the frame; crop below the shoulders. The unobstructed principal face occupies at least a quarter of the image height. This framing takes priority over set and props.",
             f"HOST: {host.get('name', '')} — {host.get('description', '')}",
             f"SET: {host.get('plateau', '')}",
             build_image_style_block(director, palette, intensity),
-            "The host is the factual anchor of the sketch, composed and deadpan, while a visually absurd retrofuturist mechanism related to the current news is already malfunctioning around the desk.",
-            "Create a strong instantly readable vertical composition with exaggerated props and costume details.",
-            "Frame the host in a medium close-up with a large, clearly visible face; the studio gag remains visible around the desk and in the background.",
+            "The host is composed and deadpan, ready to speak. Keep the set and props partly visible behind the shoulders. Do not pull back to show the desk or the whole costume. Leave space below the face for the editorial title.",
             "Portrait 9:16, rich saturated color, cinematic visual impact.",
         ]
     )
@@ -420,14 +410,14 @@ def build_reporter_image_prompt(
     return "\n".join(
         [
             "KEYFRAME FOR A SELF-CONTAINED COMEDIC FIELD-REPORT SKETCH.",
+            "FIRST FRAME: medium close-up, head and shoulders filling the frame; crop below the shoulders. The unobstructed principal face occupies at least a quarter of the image height. This framing takes priority over the generated setup, location and cast.",
             f"REPORTER: {reporter.get('name', '')} — {reporter.get('description', '')}",
             f"SECONDARY CHARACTERS: {people_list}",
             f"LOCATION: {segment.get('location', '')}",
-            f"SCENE ACTION: {segment.get('scene_action', '')}",
+            f"SCENE ACTION (initial setup): {segment.get('reporter_image_prompt') or segment.get('scene_action', '')}",
             build_image_style_block(director, palette, intensity),
-            "Compose the exact visual setup of a sketch: the reporter is visibly trapped in or struggling with the news-related gag while every secondary character actively contributes to the escalating situation.",
-            "All characters are visible enough to read their funny retrofuturistic costumes and roles.",
-            "Frame the main reporter in a medium shot or medium close-up with a clearly visible face; stage the physical gag and secondary characters around them. Reserve wide views for scenery, extras and inserts.",
+            "Depict the initial setup before the physical gag escalates, not a montage of its stages or its final payoff.",
+            "Keep props and secondary characters behind the shoulders, partly visible if necessary. Do not widen the shot to fit the cast, desk or whole costume. Leave space below the face for the editorial title.",
             "Portrait 9:16, extremely colorful, visually surprising, cinematic and immediately understandable.",
         ]
     )
@@ -444,6 +434,7 @@ def build_host_video_prompt(
     d = _director(director)
     p = _palette(palette)
     host = jt.get("host") or {}
+    validate_staging(segment, host)
     motion = {"subtle": "restrained", "moderate": "expressive", "strong": "energetic"}[intensity]
     line = str(segment.get("host_dialogue", "")).strip()
     action = segment.get("host_action") or host.get("host_action") or ""
@@ -453,9 +444,11 @@ def build_host_video_prompt(
             "",
             f"integrated_multimodal_description: [Shot 1] A satirical TV news shot lasting {duration_seconds:g} seconds. "
             f"{d['style']} Preserve the host, costume, set, lighting and {p['label']} colors from <Picture 1>. "
-            "The camera holds a medium close-up with the host's face clearly visible. "
+            "Begin in a medium close-up, the host's face clearly visible and large while speaking. "
             f"The physical action is {motion}, with coordinated, readable reactions. "
             f"The studio gag develops around the composed, deadpan host: {action}. "
+            f"Direction: {camera_direction(segment, 'host')} "
+            "No readable text, subtitles or logos. Only the host speaks. "
             f"The host {host.get('name', '')} with a natural French broadcast voice (S1) says: <d>[French] {line}</d>",
             "",
             "overall_soundscape: Quiet studio room ambience and synchronized mechanical sounds from the visible gag.",
@@ -472,6 +465,9 @@ def build_reporter_video_prompt(
     duration_seconds: float,
     intensity: str = DEFAULT_INTENSITY,
 ) -> str:
+    validate_staging(segment)
+    tail = silent_tail_seconds(segment)
+    ending = f"Reserve the final {tail:g} seconds for the silent ending after speech. " if tail else ""
     d = _director(director)
     p = _palette(palette)
     reporter = segment.get("reporter") or {}
@@ -490,10 +486,13 @@ def build_reporter_video_prompt(
             "",
             f"integrated_multimodal_description: [Shot 1] A satirical field-report shot lasting {duration_seconds:g} seconds. "
             f"{d['style']} Preserve the reporter, cast, costumes, location, lighting and {p['label']} colors from <Picture 1>. "
-            "The camera follows the physical action in a continuous medium shot with the main reporter's face clearly visible. "
+            "Begin in a medium close-up, the reporter's face clearly visible and large while speaking. "
             f"The physical action is {motion}, with coordinated, readable reactions. "
             f"The physical gag develops around the reporter: {segment.get('scene_action', '')}. "
             f"The secondary characters ({people_desc}) react to the visible action. "
+            f"Direction: {camera_direction(segment, 'reporter')} "
+            f"{ending}"
+            "No readable text, subtitles or logos. Only the reporter speaks. "
             f"The reporter {reporter.get('name', '')} with a clear natural French voice (S1) says: <d>[French] {line}</d>",
             "",
             "overall_soundscape: Natural location ambience and synchronized movement and prop sounds from the visible action.",

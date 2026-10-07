@@ -88,7 +88,8 @@ def test_postprocessing_and_image_prompts_restore_retrofuturist_world() -> None:
     assert "SECONDARY CHARACTERS" in reporter_prompt
     assert "SCENE ACTION" in reporter_prompt
     assert "medium close-up" in host_prompt
-    assert "medium shot or medium close-up" in reporter_prompt
+    assert "medium close-up, head and shoulders" in reporter_prompt
+    assert "quarter of the image height" in reporter_prompt
 
 
 def test_video_prompts_keep_comedy_direction_and_h3_french_dialogue() -> None:

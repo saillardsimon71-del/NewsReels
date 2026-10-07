@@ -39,6 +39,26 @@ Le batch est traité séquentiellement dans un seul conteneur Modal/ComfyUI.
 
 L'intensité change la densité et l'escalade visuelle sans modifier les faits.
 
+Agnes choisit librement la réalisation de chaque sujet : mouvements caméra, mise en scène,
+gags physiques et chute. Aucun catalogue d'effets ni branche de rendu spécifique à un gag.
+Le champ existant `camera_plan` accepte désormais un objet : `host` et `reporter` sont
+des notes de réalisation en anglais, `silent_tail_seconds` réserve de 0 à 3 secondes
+après la réplique reporter. Les anciennes chaînes restent lisibles ; elles ne sont pas
+injectées dans H3, comme dans la version précédente.
+
+Le dialogue français apparaît une seule fois dans le prompt H3. Les tags H3 dans les
+répliques ou les champs visuels, les répétitions de dialogue et les débuts explicitement
+larges sont refusés. Les nouveaux reporters restent sous 18 mots ; un scénario dépassant
+la plage H3 reçoit la correction automatique Agnes avant les images et le GPU.
+
+Les prompts de keyframe donnent priorité au medium close-up, visage dégagé, avec les figurants en
+arrière-plan. Agnes décrit la pose initiale via `reporter_image_prompt`, distincte de
+l'action animée. Aucun recadrage artificiel systématique n'est ajouté. Le cadrage reste
+serré pendant la parole ; la réalisation peut ensuite révéler le décor ou une chute.
+
+Chaque run conserve `h3_jobs.json` : prompts exacts, dialogues, durées, frames, seeds et
+empreintes des keyframes. Cela facilite le diagnostic sans enregistrer la clé Agnes.
+
 ## Garde-fous factuels
 
 Le scénario Agnes reçoit pour chaque actualité :
@@ -89,12 +109,14 @@ de `master` ne peut pas modifier silencieusement ce déploiement.
 
 La durée de chaque clip dépend du dialogue : estimation à 150 mots/minute, marge de
 0,75 s, minimum de 124 frames, puis arrondi supérieur sur la grille H3. Le reporter
-dispose aussi d'un minimum visuel de 5 s pour le gag. Ces valeurs de débit et de marge
+dispose aussi d'un minimum visuel de 5 s pour le gag et de la fin silencieuse choisie par
+Agnes, ajoutée à l'estimation de parole avant l'arrondi. Ces valeurs de débit et de marge
 sont des choix NewsReel, pas des exigences du modèle. Un contenu dépassant la plage
 testée est refusé, sans tronquer les mots. Un batch peut mélanger les durées.
 
-Le contrat client/worker passe à la version 2 : redéployer le worker et utiliser le
-client de cette branche ensemble. Les anciens MP4 restent lisibles pour le remontage.
+Le contrat client/worker reste en version 2, déjà validée sur `fix/h3-adaptive-duration`.
+Cette évolution de scénarisation ne change ni les arguments worker ni le graphe H3 ;
+elle utilise le worker déjà redéployé. Les anciens MP4 restent lisibles pour le remontage.
 `H3Job.dialogue` est une métadonnée ; le modèle reçoit la ligne parlée une seule fois
 dans le champ `prompt`, avec `(S1)` et `<d>[French] ...</d>`.
 
@@ -136,8 +158,7 @@ Copier éventuellement `.env.example` vers `.env`.
 
 ## Déployer le worker Modal
 
-Après une modification de `modal_h3.py`, `newsreel/h3_workflow.py`,
-`newsreel/h3_worker_contract.py` ou de la couche de prompts utilisée dans le worker :
+Après une modification du worker, de son graphe ou de son contrat d'appel :
 
 ```powershell
 modal deploy modal_h3.py
@@ -166,6 +187,30 @@ Ouvrir :
 
 ```text
 http://127.0.0.1:8000
+```
+
+Avec `AGNES_API_KEY` dans `.env`, lancer un JT complet depuis un second terminal Windows :
+
+```powershell
+cd C:\Users\saill\Downloads\NewsReels-test
+$body = @{
+    query = 'France environnement economie when:2d'
+    count = 2
+    director = 'documentary_color'
+    palette = 'electric_coral_cyan'
+    intensity = 'strong'
+} | ConvertTo-Json
+$run = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/runs' -ContentType 'application/json; charset=utf-8' -Body $body
+do {
+    Start-Sleep -Seconds 15
+    $state = Invoke-RestMethod -Uri "http://127.0.0.1:8000/runs/$($run.run_id)"
+    $state.status
+} while ($state.status -notin @('complete', 'failed'))
+if ($state.status -eq 'complete') {
+    Invoke-Item (Join-Path $run.output_path 'newsreel_final.mp4')
+} else {
+    $state.errors | Format-List
+}
 ```
 
 Par défaut le bridge écoute uniquement sur `127.0.0.1`.

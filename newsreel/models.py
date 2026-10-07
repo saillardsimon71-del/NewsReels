@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -37,7 +38,7 @@ class Segment:
     people: list[dict[str, Any]] = field(default_factory=list)
     location: str = ""
     scene_action: str = ""
-    camera_plan: str = ""
+    camera_plan: dict[str, Any] | str = ""
     reporter_name: str = "Reporter"
     reporter_description: str = ""
     reporter_image_prompt: str = ""
@@ -70,7 +71,7 @@ class Segment:
             people=[item for item in value.get("people", []) if isinstance(item, dict)],
             location=str(value.get("location", "")).strip(),
             scene_action=str(value.get("scene_action", value.get("reporter_action", ""))).strip(),
-            camera_plan=str(value.get("camera_plan", "")).strip(),
+            camera_plan=deepcopy(value.get("camera_plan", "")),
             reporter_name=str(reporter.get("name", value.get("reporter_name", "Reporter"))).strip(),
             reporter_description=str(
                 reporter.get("description", value.get("reporter_description", ""))

@@ -14,6 +14,7 @@ from .creative import (
     DEFAULT_PALETTE,
     build_host_video_prompt,
     build_reporter_video_prompt,
+    silent_tail_seconds,
 )
 from .h3_workflow import (
     H3_DURATION_SECONDS,
@@ -90,7 +91,7 @@ def build_reporter_prompt(
         segment.to_dict(),
         director,
         palette,
-        duration_seconds if duration_seconds is not None else h3_frames_for_dialogue(spoken_text, visual_seconds=5) / H3_FPS,
+        duration_seconds if duration_seconds is not None else h3_frames_for_dialogue(spoken_text, visual_seconds=5, tail_seconds=silent_tail_seconds(segment.to_dict())) / H3_FPS,
         intensity,
     )
     return creative
@@ -118,7 +119,7 @@ def create_h3_jobs(
         if not reporter_image.is_file():
             raise FileNotFoundError(f"Image H3 introuvable: {reporter_image}")
         host_frames = h3_frames_for_dialogue(segment.host_dialogue)
-        reporter_frames = h3_frames_for_dialogue(segment.reporter_dialogue, visual_seconds=5)
+        reporter_frames = h3_frames_for_dialogue(segment.reporter_dialogue, visual_seconds=5, tail_seconds=silent_tail_seconds(segment.to_dict()))
         jobs.append(
             H3Job(
                 id=f"host-{index}",

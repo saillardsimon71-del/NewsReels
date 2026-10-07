@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Protocol
 
@@ -164,6 +166,7 @@ class NewsReelPipeline:
                 director=director,
                 palette=palette,
             )
+            self._save_h3_jobs(run_id, jobs)
             self.store.stage(
                 run_id,
                 active_stage,
@@ -289,6 +292,20 @@ class NewsReelPipeline:
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"scenario.json illisible: {exc}") from exc
         return Scenario.from_mapping(payload)
+
+    def _save_h3_jobs(self, run_id: str, jobs: list[H3Job]) -> None:
+        run_dir = self.store.path(run_id)
+        records = [
+            {
+                **asdict(job),
+                "image_path": job.image_path.relative_to(run_dir).as_posix(),
+                "image_sha256": hashlib.sha256(job.image_path.read_bytes()).hexdigest(),
+            }
+            for job in jobs
+        ]
+        path = run_dir / "h3_jobs.json"
+        RunStore.atomic_write_json(path, records)
+        self.store.register_file(run_id, path)
 
     def _collect_existing_h3(
         self, run_dir: Path, scenario: Scenario
@@ -428,6 +445,7 @@ class NewsReelPipeline:
         active_stage = "h3"
         try:
             jobs = create_h3_jobs(scenario, host_image, reporter_images, self.settings)
+            self._save_h3_jobs(run_id, jobs)
             self.store.stage(
                 run_id,
                 "h3",

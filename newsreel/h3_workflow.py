@@ -55,12 +55,14 @@ def h3_frames_for_duration(seconds: float) -> int:
     return frames
 
 
-def h3_frames_for_dialogue(dialogue: str, visual_seconds: float = 0) -> int:
+def h3_frames_for_dialogue(dialogue: str, visual_seconds: float = 0, tail_seconds: float = 0) -> int:
     words = re.findall(r"\w+(?:['\u2019-]\w+)*", dialogue)
     if not words:
         raise ValueError("Le dialogue H3 est vide.")
     # NewsReels pacing estimate: 150 words/minute plus a short lead/tail margin.
-    return h3_frames_for_duration(max(len(words) / 2.5 + 0.75, visual_seconds))
+    if not math.isfinite(tail_seconds) or tail_seconds < 0:
+        raise ValueError("La marge silencieuse H3 doit être positive et finie.")
+    return h3_frames_for_duration(max(len(words) / 2.5 + 0.75 + tail_seconds, visual_seconds))
 
 
 def validate_h3_timing(frames: int, duration_seconds: float) -> None:

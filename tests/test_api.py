@@ -12,6 +12,7 @@ from newsreel.config import Settings
 def test_local_endpoints_and_explicit_missing_credentials(tmp_path: Path, monkeypatch) -> None:
     import importlib.util
 
+    monkeypatch.delenv("AGNES_API_KEY", raising=False)
     real_find_spec = importlib.util.find_spec
     monkeypatch.setattr(
         "bridge.importlib.util.find_spec",
