@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import re
 from typing import Any
 
 H3_MODEL_FILES = {
@@ -12,8 +14,12 @@ H3_MODEL_FILES = {
 H3_WIDTH = 768
 H3_HEIGHT = 1344
 H3_FPS = 24
-H3_FRAMES = 243
-H3_DURATION_SECONDS = 10.125
+H3_MIN_FRAMES = 124
+H3_MAX_FRAMES = 362
+H3_FRAME_STEP = 17
+H3_FRAME_OFFSET = 5
+H3_FRAMES = H3_MIN_FRAMES
+H3_DURATION_SECONDS = H3_FRAMES / H3_FPS
 H3_STEPS = 8
 H3_ATTENTION_BACKEND = "comfy kitchen attention"
 H3_SCHEDULER = "simple"
@@ -39,14 +45,47 @@ H3_MODAL_TIMEOUT_SECONDS = 5400
 H3_COMFYUI_REVISION = "d49e888586dd8ae012c0667b33466b815fee07f7"
 
 
+def h3_frames_for_duration(seconds: float) -> int:
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("La durée H3 doit être positive et finie.")
+    requested = max(H3_MIN_FRAMES, math.ceil(seconds * H3_FPS))
+    frames = requested + (H3_FRAME_OFFSET - requested) % H3_FRAME_STEP
+    if frames > H3_MAX_FRAMES:
+        raise ValueError("Le contenu dépasse la plage H3 testée (362 frames / 15,083 s).")
+    return frames
+
+
+def h3_frames_for_dialogue(dialogue: str, visual_seconds: float = 0) -> int:
+    words = re.findall(r"\w+(?:['\u2019-]\w+)*", dialogue)
+    if not words:
+        raise ValueError("Le dialogue H3 est vide.")
+    # NewsReels pacing estimate: 150 words/minute plus a short lead/tail margin.
+    return h3_frames_for_duration(max(len(words) / 2.5 + 0.75, visual_seconds))
+
+
+def validate_h3_timing(frames: int, duration_seconds: float) -> None:
+    if (
+        type(frames) is not int
+        or not H3_MIN_FRAMES <= frames <= H3_MAX_FRAMES
+        or frames % H3_FRAME_STEP != H3_FRAME_OFFSET
+    ):
+        raise ValueError("Frames H3 invalides: grille 17k+5, plage testée 124 à 362.")
+    if not isinstance(duration_seconds, (int, float)) or not math.isclose(
+        duration_seconds, frames / H3_FPS, rel_tol=0, abs_tol=1e-6
+    ):
+        raise ValueError("La durée H3 doit correspondre aux frames à 24 fps.")
+
+
 def h3_contract_config() -> dict[str, Any]:
     """Serializable batch contract shared by the local client and Modal worker."""
     return {
         "width": H3_WIDTH,
         "height": H3_HEIGHT,
         "fps": H3_FPS,
-        "frames": H3_FRAMES,
-        "duration_seconds": H3_DURATION_SECONDS,
+        "min_frames": H3_MIN_FRAMES,
+        "max_frames": H3_MAX_FRAMES,
+        "frame_step": H3_FRAME_STEP,
+        "frame_offset": H3_FRAME_OFFSET,
         "steps": H3_STEPS,
         "native_audio": True,
         "models": dict(H3_MODEL_FILES),
@@ -88,8 +127,6 @@ def build_h3_api_workflow(
         ("width", H3_WIDTH),
         ("height", H3_HEIGHT),
         ("fps", H3_FPS),
-        ("frames", H3_FRAMES),
-        ("duration_seconds", H3_DURATION_SECONDS),
         ("steps", H3_STEPS),
     ):
         if key in job and job[key] != expected:
@@ -97,9 +134,12 @@ def build_h3_api_workflow(
                 f"Paramètre H3 invalide pour {key}: {job[key]!r} au lieu de {expected}."
             )
 
-    seed = int(job.get("seed", 0))
-    if not 0 <= seed < 2**53:
-        raise ValueError("La seed H3 doit être un entier compris entre 0 et 2^53.")
+    frames = job.get("frames", H3_FRAMES)
+    validate_h3_timing(frames, job.get("duration_seconds", frames / H3_FPS))
+
+    seed = job.get("seed", 0)
+    if type(seed) is not int or not 0 <= seed < 2**64:
+        raise ValueError("La seed H3 doit être un entier non signé sur 64 bits.")
 
     return {
         # Input image and four exact checkpoint/VAE files.
@@ -137,7 +177,7 @@ def build_h3_api_workflow(
             "class_type": "BlockSparseAttention",
             "inputs": {"model": ["128", 0], **H3_VSA_SETTINGS},
         },
-        # One 243-frame / 24-fps H3 image-to-video sample with the requested sampler.
+        # Video and native audio share this clip's timeline.
         "104": {
             "class_type": "MiniMaxH3ImageToVideo",
             "inputs": {
@@ -147,7 +187,7 @@ def build_h3_api_workflow(
                 "prompt": prompt,
                 "width": H3_WIDTH,
                 "height": H3_HEIGHT,
-                "length": H3_FRAMES,
+                "length": frames,
             },
         },
         "9": {

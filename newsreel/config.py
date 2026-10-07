@@ -5,7 +5,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .h3_workflow import H3_DURATION_SECONDS, H3_FPS, H3_HEIGHT, H3_STEPS, H3_WIDTH
+from .h3_workflow import H3_FPS, H3_HEIGHT, H3_STEPS, H3_WIDTH
 
 
 def _resolve_path(value: str | Path | None, base: Path) -> Path | None:
@@ -37,7 +37,6 @@ class Settings:
     h3_width: int = H3_WIDTH
     h3_height: int = H3_HEIGHT
     h3_fps: int = H3_FPS
-    h3_duration_seconds: float = H3_DURATION_SECONDS
     h3_steps: int = H3_STEPS
     max_news_items: int = 20
 
@@ -55,10 +54,9 @@ class Settings:
             H3_HEIGHT,
             H3_FPS,
             H3_STEPS,
-        ) or self.h3_duration_seconds != H3_DURATION_SECONDS:
+        ):
             raise ValueError(
-                "Le contrat validé FastH3 V2 est fixé à 768x1344, 24 fps, 243 frames / "
-                "10,125 s et 8 étapes."
+                "Le contrat FastH3 V2 utilise 768x1344, 24 fps et 8 étapes."
             )
 
     @classmethod

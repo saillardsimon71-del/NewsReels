@@ -197,6 +197,7 @@ def build_scenario_prompt(
             "- headline: copy the EXACT selected HEADLINE verbatim.",
             "- Use ONLY the supplied HEADLINE / SOURCE / PUBLISHED / CONTEXT blocks for factual claims.",
             "- summary: only facts supported by the selected news block. Never invent numbers, names, dates or events.",
+            "- Write visual descriptions and physical actions in English; spoken dialogue stays verbatim in French.",
             "- host_dialogue: factual TV-news statement based on the summary, 8-16 French words.",
             "- reporter.dialogue: NOT factual repetition. Exactly one funny French sentence, 8-18 words, reacting to the physical gag.",
             "",
@@ -254,7 +255,7 @@ def build_scenario_prompt(
             "      ],",
             '      "location": "hallucinatory retrofuturistic location tied to the news",',
             '      "scene_action": "continuous visual sketch: setup, escalation, absurd gag, reporter predicament, punchline moment",',
-            '      "camera_plan": "short-form sketch coverage: establishing shot, reaction close-up, physical gag, punchline close-up, final wide",',
+            '      "camera_plan": "one continuous medium shot with the reporter face clearly visible; wide views for scenery or inserts only",',
             '      "reporter": {"name":"...","description":"retro-futuristic funny outfit","dialogue":"8-18 French words: ONE original joke about the scene, NOT the news facts"},',
             '      "emotion": "one word"',
             "    }",
@@ -263,10 +264,6 @@ def build_scenario_prompt(
             f"Exactly {seg_count} segments. Every segment is a distinct sketch. Do not repeat reporter joke structures.",
         ]
     )
-
-
-def _count_words(value: str) -> int:
-    return len(str(value or "").strip().split())
 
 
 def apply_creative_postprocessing(
@@ -329,17 +326,9 @@ def apply_creative_postprocessing(
             people = segment["people"]
 
         host_dialogue = str(segment.get("host_dialogue", "")).strip()
-        if _count_words(host_dialogue) > 18:
-            host_dialogue = " ".join(host_dialogue.split()[:16])
-        elif 0 < _count_words(host_dialogue) < 6:
-            host_dialogue += " aujourd'hui."
         segment["host_dialogue"] = host_dialogue
 
         reporter_dialogue = str(reporter.get("dialogue", "")).strip()
-        if _count_words(reporter_dialogue) > 22:
-            reporter_dialogue = " ".join(reporter_dialogue.split()[:18])
-        elif 0 < _count_words(reporter_dialogue) < 8:
-            reporter_dialogue += " — voilà le problème."
         if not reporter_dialogue or reporter_dialogue == host_dialogue:
             reporter_dialogue = DEFAULT_REPORTER_DIALOGUE_FALLBACK
         reporter["dialogue"] = reporter_dialogue
@@ -409,6 +398,7 @@ def build_host_image_prompt(
             build_image_style_block(director, palette, intensity),
             "The host is the factual anchor of the sketch, composed and deadpan, while a visually absurd retrofuturist mechanism related to the current news is already malfunctioning around the desk.",
             "Create a strong instantly readable vertical composition with exaggerated props and costume details.",
+            "Frame the host in a medium close-up with a large, clearly visible face; the studio gag remains visible around the desk and in the background.",
             "Portrait 9:16, rich saturated color, cinematic visual impact.",
         ]
     )
@@ -437,6 +427,7 @@ def build_reporter_image_prompt(
             build_image_style_block(director, palette, intensity),
             "Compose the exact visual setup of a sketch: the reporter is visibly trapped in or struggling with the news-related gag while every secondary character actively contributes to the escalating situation.",
             "All characters are visible enough to read their funny retrofuturistic costumes and roles.",
+            "Frame the main reporter in a medium shot or medium close-up with a clearly visible face; stage the physical gag and secondary characters around them. Reserve wide views for scenery, extras and inserts.",
             "Portrait 9:16, extremely colorful, visually surprising, cinematic and immediately understandable.",
         ]
     )
@@ -452,33 +443,24 @@ def build_host_video_prompt(
 ) -> str:
     d = _director(director)
     p = _palette(palette)
-    intensity_rule = _intensity(intensity)
     host = jt.get("host") or {}
-    stani = segment.get("stanislavski") or host.get("stanislavski") or {}
+    motion = {"subtle": "restrained", "moderate": "expressive", "strong": "energetic"}[intensity]
     line = str(segment.get("host_dialogue", "")).strip()
     action = segment.get("host_action") or host.get("host_action") or ""
     return "\n".join(
         [
-            f"COMEDIC TV NEWS SKETCH — {duration_seconds:g} seconds.",
-            "The host delivers the actual news fact while the studio performs a visual joke around them.",
-            d["label"].upper() + ".",
-            f"HOST: {host.get('name', '')} — {host.get('description', '')}",
-            f"STANISLAVSKI: objective {stani.get('objective', 'deliver the news')}; obstacle {stani.get('obstacle', 'the absurd studio')}",
-            f"RETROFUTURIST STUDIO: {host.get('plateau', '')}",
-            f"VISUAL GAG: {action}",
-            "The host must remain the factual narrator; do not turn the host dialogue into a joke that changes the news.",
-            "COMEDIC STRUCTURE: immediate visual setup, escalating malfunction, host remains serious, final visual punchline.",
-            f"CAMERA: {d['camera']}",
-            f"STYLE: {d['style']}",
-            f"LIGHTING: {d['lighting']}",
-            f"FILM: {d['film']}",
-            f"PALETTE: {p['full']}",
-            f"CREATIVE INTENSITY: {intensity_rule}",
-            "SATURATION: maximum rich color; absolutely no grey/desaturated fallback.",
-            "SOUND: no music. Only diegetic foley, mechanical noises, reactions, and birds.",
-            "The host has one consistent natural French broadcast voice (S1): same timbre, apparent age, accent, cadence and vocal energy in every studio segment.",
-            f"<d>[French] {line}</d>",
-            "No subtitles, no readable text, no watermark, no logo.",
+            "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.",
+            "",
+            f"integrated_multimodal_description: [Shot 1] A satirical TV news shot lasting {duration_seconds:g} seconds. "
+            f"{d['style']} Preserve the host, costume, set, lighting and {p['label']} colors from <Picture 1>. "
+            "The camera holds a medium close-up with the host's face clearly visible. "
+            f"The physical action is {motion}, with coordinated, readable reactions. "
+            f"The studio gag develops around the composed, deadpan host: {action}. "
+            f"The host {host.get('name', '')} with a natural French broadcast voice (S1) says: <d>[French] {line}</d>",
+            "",
+            "overall_soundscape: Quiet studio room ambience and synchronized mechanical sounds from the visible gag.",
+            "",
+            "non_diegetic_music: N/A",
         ]
     )
 
@@ -492,37 +474,30 @@ def build_reporter_video_prompt(
 ) -> str:
     d = _director(director)
     p = _palette(palette)
-    intensity_rule = _intensity(intensity)
     reporter = segment.get("reporter") or {}
+    motion = {"subtle": "restrained", "moderate": "expressive", "strong": "energetic"}[intensity]
     line = str(reporter.get("dialogue", "")).strip()
     people = segment.get("people") or []
     people_desc = " || ".join(
-        f"{person.get('name', '')} ({person.get('role', '')}) — {person.get('description', '')}"
+        f"{person.get('name', '')} ({person.get('role', '')}): "
+        f"{person['stanislavski'].get('physical_action', 'reacts to the gag') if isinstance(person.get('stanislavski'), dict) else 'reacts to the gag'}"
         for person in people
         if isinstance(person, dict)
     )
-    camera_plan = segment.get("camera_plan") or "establishing shot, reaction close-up, physical gag, punchline close-up, final wide"
     return "\n".join(
         [
-            f"COMPLETE COMEDIC FIELD-REPORT SKETCH — {duration_seconds:g} seconds.",
-            d["label"].upper() + ".",
-            f"REPORTER: {reporter.get('name', '')} — {reporter.get('description', '')}",
-            f"RETROFUTURIST CAST: {people_desc}",
-            f"LOCATION: {segment.get('location', '')}",
-            f"FULL VISUAL GAG: {segment.get('scene_action', '')}",
-            "All characters are active. The reporter has a concrete comic problem caused by the news-related situation.",
-            "COMEDIC STRUCTURE: 1) establish the bizarre situation; 2) escalate physically; 3) reporter tries to maintain journalistic seriousness; 4) the gag peaks; 5) reporter delivers the punchline while the visual chaos continues.",
-            "CRITICAL DIALOGUE RULE: the reporter MUST NOT repeat the host, headline, summary, numbers, names, dates or factual explanation. The reporter says only the single scene-dependent joke provided in the <d> block below.",
-            f"CAMERA: {camera_plan}; {d['camera']}",
-            f"STYLE: {d['style']}",
-            f"LIGHTING: {d['lighting']}",
-            f"FILM: {d['film']}",
-            f"PALETTE: {p['full']}",
-            f"CREATIVE INTENSITY: {intensity_rule}",
-            "SATURATION: maximum rich color on every frame; never grey, monochrome, desaturated or bland.",
-            "SOUND: no music. Only diegetic foley, physical comedy sounds, environmental ambience and birds.",
-            "The reporter has a clear natural French voice (S1).",
-            f"<d>[French] {line}</d>",
-            "No subtitles, no readable text, no watermark, no logo.",
+            "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.",
+            "",
+            f"integrated_multimodal_description: [Shot 1] A satirical field-report shot lasting {duration_seconds:g} seconds. "
+            f"{d['style']} Preserve the reporter, cast, costumes, location, lighting and {p['label']} colors from <Picture 1>. "
+            "The camera follows the physical action in a continuous medium shot with the main reporter's face clearly visible. "
+            f"The physical action is {motion}, with coordinated, readable reactions. "
+            f"The physical gag develops around the reporter: {segment.get('scene_action', '')}. "
+            f"The secondary characters ({people_desc}) react to the visible action. "
+            f"The reporter {reporter.get('name', '')} with a clear natural French voice (S1) says: <d>[French] {line}</d>",
+            "",
+            "overall_soundscape: Natural location ambience and synchronized movement and prop sounds from the visible action.",
+            "",
+            "non_diegetic_music: N/A",
         ]
     )

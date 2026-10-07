@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from newsreel.creative import (
     DIRECTORS,
     PALETTES,
@@ -85,6 +87,8 @@ def test_postprocessing_and_image_prompts_restore_retrofuturist_world() -> None:
     assert "SELF-CONTAINED COMEDIC FIELD-REPORT SKETCH" in reporter_prompt
     assert "SECONDARY CHARACTERS" in reporter_prompt
     assert "SCENE ACTION" in reporter_prompt
+    assert "medium close-up" in host_prompt
+    assert "medium shot or medium close-up" in reporter_prompt
 
 
 def test_video_prompts_keep_comedy_direction_and_h3_french_dialogue() -> None:
@@ -101,10 +105,31 @@ def test_video_prompts_keep_comedy_direction_and_h3_french_dialogue() -> None:
     reporter_prompt = build_reporter_video_prompt(
         segment, "wes_anderson", "electric_coral_cyan", 10.125
     )
-    assert "VISUAL GAG" in host_prompt
-    assert "STANISLAVSKI" in host_prompt
+    assert segment["host_action"] in host_prompt
     assert "<d>[French] " in host_prompt
-    assert "COMPLETE COMEDIC FIELD-REPORT SKETCH" in reporter_prompt
-    assert "CRITICAL DIALOGUE RULE" in reporter_prompt
+    assert segment["scene_action"] in reporter_prompt
+    assert reporter_prompt.count(segment["reporter"]["dialogue"]) == 1
     assert "LIP SYNC" not in reporter_prompt
     assert "<d>[French] " in reporter_prompt
+
+
+def test_reporter_prompt_preserves_secondary_character_physical_action() -> None:
+    segment = _scenario_value()["segments"][0]
+    segment["people"][0]["stanislavski"] = {"physical_action": "cranks the jammed conveyor"}
+    prompt = build_reporter_video_prompt(segment, "wes_anderson", "electric_coral_cyan", 6)
+    assert "cranks the jammed conveyor" in prompt
+
+
+@pytest.mark.parametrize("value", ["unexpected", ["unexpected"]])
+def test_reporter_prompt_tolerates_malformed_secondary_stanislavski(value) -> None:
+    segment = _scenario_value()["segments"][0]
+    segment["people"][0]["stanislavski"] = value
+    assert "Bob" in build_reporter_video_prompt(segment, "wes_anderson", "electric_coral_cyan", 6)
+
+
+def test_motion_intensity_reaches_both_h3_prompts() -> None:
+    scenario = _scenario_value()
+    segment = scenario["segments"][0]
+    for intensity, word in [("subtle", "restrained"), ("strong", "energetic")]:
+        assert word in build_host_video_prompt(scenario, segment, "wes_anderson", "electric_coral_cyan", 6, intensity)
+        assert word in build_reporter_video_prompt(segment, "wes_anderson", "electric_coral_cyan", 6, intensity)

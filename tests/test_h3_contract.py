@@ -92,14 +92,13 @@ def test_full_h3_prompts_keep_creativity_dialogue_and_stability(tmp_path: Path) 
     host_prompt = build_host_prompt(scenario, scenario.segments[0])
     reporter_prompt = build_reporter_prompt(scenario.segments[0])
     for prompt in (host_prompt, reporter_prompt):
-        assert "Preserve the same face, hairstyle, costume, set design" in prompt
-        assert "Keep anatomy, faces, hands and fingers coherent" in prompt
-        assert "Avoid morphing, duplication, identity drift" in prompt
+        assert "from <Picture 1>" in prompt
+        assert "face clearly visible" in prompt
         assert "<d>[French] " in prompt
-    assert "VISUAL GAG" in host_prompt
-    assert "RETROFUTURIST STUDIO" in host_prompt
-    assert "COMPLETE COMEDIC FIELD-REPORT SKETCH" in reporter_prompt
-    assert "FULL VISUAL GAG" in reporter_prompt
+    assert scenario.segments[0].host_action in host_prompt
+    assert scenario.segments[0].scene_action in reporter_prompt
+    assert scenario.segments[0].host_dialogue in host_prompt
+    assert scenario.segments[0].reporter_dialogue in reporter_prompt
 
     jobs = _six_jobs(tmp_path)
     assert [job.id for job in jobs] == [
@@ -111,7 +110,7 @@ def test_full_h3_prompts_keep_creativity_dialogue_and_stability(tmp_path: Path) 
         "reporter-2",
     ]
     assert all(
-        (job.width, job.height, job.fps, job.frames, job.steps) == (768, 1344, 24, 243, 8)
+        (job.width, job.height, job.fps, job.steps) == (768, 1344, 24, 8)
         for job in jobs
     )
 
@@ -144,7 +143,7 @@ def test_api_graph_contains_exact_models_dimensions_sampling_vsa_and_native_audi
     }
 
     h3_inputs = graph["104"]["inputs"]
-    assert (h3_inputs["width"], h3_inputs["height"], h3_inputs["length"]) == (768, 1344, 243)
+    assert (h3_inputs["width"], h3_inputs["height"], h3_inputs["length"]) == (768, 1344, 124)
     assert h3_inputs["first_frame"] == ["1", 0]
     assert graph["91"]["inputs"]["fps"] == 24
     assert graph["9"]["inputs"]["scheduler"] == "simple"
@@ -173,7 +172,9 @@ def test_batch_contract_contains_six_clips_but_no_external_workflow(tmp_path: Pa
     assert "workflow" not in payload
     assert payload["run_id"] == "run-123"
     assert payload["config"] == h3_contract_config()
-    assert payload["config"]["frames"] == 243
+    assert payload["config"]["min_frames"] == 124
+    assert payload["config"]["max_frames"] == 362
+    assert payload["contract_version"] == 2
     assert payload["config"]["fps"] == 24
     assert payload["config"]["steps"] == 8
     assert payload["config"]["native_audio"] is True

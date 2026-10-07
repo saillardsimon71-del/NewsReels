@@ -60,9 +60,9 @@ Configuration validée et figée dans `newsreel/h3_workflow.py` :
 
 - FastH3 8-Step V2 / MiniMax H3 ;
 - 768×1344 ;
-- 243 frames ;
+- frames par clip sur la grille `17k+5`, de 124 à 362 ;
 - 24 fps ;
-- 10,125 s ;
+- durée par clip = frames / 24, de 5,167 à 15,083 s ;
 - 8 steps ;
 - sampler `res_multistep` ;
 - scheduler `simple` ;
@@ -82,9 +82,25 @@ d49e888586dd8ae012c0667b33466b815fee07f7
 ```
 
 Cette révision correspond au HEAD ComfyUI figé pendant la passe de durcissement production
-du 6 octobre 2026. Le graphe et les paramètres H3 ont déjà été validés en smoke réel ; le
-prochain smoke doit confirmer ce pin exact après redéploiement. Un futur changement de
-`master` ne pourra ensuite plus casser silencieusement un redéploiement.
+du 6 octobre 2026. Après redéploiement, le diagnostic du 7 octobre a produit un clip de
+124 frames avec la phrase française exacte reconnue par transcription automatique.
+Ce résultat porte sur un seul clip ; il ne garantit pas chaque futur rendu. Un changement
+de `master` ne peut pas modifier silencieusement ce déploiement.
+
+La durée de chaque clip dépend du dialogue : estimation à 150 mots/minute, marge de
+0,75 s, minimum de 124 frames, puis arrondi supérieur sur la grille H3. Le reporter
+dispose aussi d'un minimum visuel de 5 s pour le gag. Ces valeurs de débit et de marge
+sont des choix NewsReel, pas des exigences du modèle. Un contenu dépassant la plage
+testée est refusé, sans tronquer les mots. Un batch peut mélanger les durées.
+
+Le contrat client/worker passe à la version 2 : redéployer le worker et utiliser le
+client de cette branche ensemble. Les anciens MP4 restent lisibles pour le remontage.
+`H3Job.dialogue` est une métadonnée ; le modèle reçoit la ligne parlée une seule fois
+dans le champ `prompt`, avec `(S1)` et `<d>[French] ...</d>`.
+
+Sources : [guide FastH3 ComfyUI](https://docs.comfy.org/tutorials/video/minimax/minimax-h3-fastvideo),
+[guide MiniMax](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_base_en.md),
+[code ComfyUI piné](https://github.com/Comfy-Org/ComfyUI/blob/d49e888586dd8ae012c0667b33466b815fee07f7/comfy_extras/nodes_minimax_h3.py).
 
 Poids attendus dans le volume Modal `fasth3-models` :
 
@@ -219,6 +235,21 @@ python -m compileall -q newsreel bridge.py modal_h3.py
 ```
 
 La démo hors-ligne ne contacte ni Agnes ni Modal et n'utilise aucun GPU.
+
+Diagnostic GPU : un seul clip, image existante, français natif, seed fixe, sans Agnes :
+
+```powershell
+python -X utf8 -m newsreel.h3_smoke --image "C:\Users\saill\Downloads\NewsReels-test\output\20261006T181559Z-3e02044f\images\reporter-0.png"
+```
+
+Chaque diagnostic crée un nouveau dossier `output/h3-diagnostic-<uuid>` contenant
+le MP4 et `smoke.json` (prompt UTF-8 exact, seed, hash image, durées demandée/réelle,
+temps worker et temps total). Le statut `rendered` confirme seulement le rendu ;
+l'intelligibilité et la synchronisation restent à évaluer sur le clip.
+
+Les tests de montage des poids du worker utilisent des liens symboliques Linux.
+Sur Windows sans droit de création de ces liens, trois tests historiques échouent
+avec `WinError 1314`. La CI Linux exécute la suite complète.
 
 ## Architecture
 

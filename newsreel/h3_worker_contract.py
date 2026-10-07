@@ -23,6 +23,7 @@ from .h3_workflow import (
     H3_STEPS,
     H3_WIDTH,
     h3_contract_config,
+    h3_frames_for_dialogue,
 )
 from .models import Scenario, Segment
 
@@ -53,23 +54,12 @@ class H3BatchResult:
     generation_seconds: float | None = None
 
 
-def _stability_block(role: str) -> str:
-    return "\n".join(
-        [
-            f"Use the supplied first frame as the exact visual identity reference for this {role} shot.",
-            "Preserve the same face, hairstyle, costume, set design, color palette and overall composition from the Agnes keyframe.",
-            "Keep anatomy, faces, hands and fingers coherent from frame to frame; preserve every character's identity.",
-            "Motion must remain physically coherent even when the visual gag is absurd. Avoid morphing, duplication, identity drift or sudden set replacement.",
-            "Keep camera movement controlled enough to protect facial consistency and lip sync.",
-        ]
-    )
-
-
 def build_host_prompt(
     scenario: Scenario,
     segment: Segment,
     director: str = DEFAULT_DIRECTOR,
     palette: str = DEFAULT_PALETTE,
+    duration_seconds: float | None = None,
 ) -> str:
     spoken_text = segment.host_dialogue.strip()
     if not spoken_text:
@@ -80,10 +70,10 @@ def build_host_prompt(
         segment.to_dict(),
         director,
         palette,
-        H3_DURATION_SECONDS,
+        duration_seconds if duration_seconds is not None else h3_frames_for_dialogue(spoken_text) / H3_FPS,
         intensity,
     )
-    return creative + "\n" + _stability_block("studio host")
+    return creative
 
 
 def build_reporter_prompt(
@@ -91,6 +81,7 @@ def build_reporter_prompt(
     director: str = DEFAULT_DIRECTOR,
     palette: str = DEFAULT_PALETTE,
     intensity: str = "strong",
+    duration_seconds: float | None = None,
 ) -> str:
     spoken_text = segment.reporter_dialogue.strip()
     if not spoken_text:
@@ -99,10 +90,10 @@ def build_reporter_prompt(
         segment.to_dict(),
         director,
         palette,
-        H3_DURATION_SECONDS,
+        duration_seconds if duration_seconds is not None else h3_frames_for_dialogue(spoken_text, visual_seconds=5) / H3_FPS,
         intensity,
     )
-    return creative + "\n" + _stability_block("field reporter")
+    return creative
 
 
 def create_h3_jobs(
@@ -126,6 +117,8 @@ def create_h3_jobs(
     ):
         if not reporter_image.is_file():
             raise FileNotFoundError(f"Image H3 introuvable: {reporter_image}")
+        host_frames = h3_frames_for_dialogue(segment.host_dialogue)
+        reporter_frames = h3_frames_for_dialogue(segment.reporter_dialogue, visual_seconds=5)
         jobs.append(
             H3Job(
                 id=f"host-{index}",
@@ -133,13 +126,13 @@ def create_h3_jobs(
                 image_path=host_image,
                 dialogue=segment.host_dialogue,
                 prompt=build_host_prompt(
-                    scenario, segment, selected_director, selected_palette
+                    scenario, segment, selected_director, selected_palette, host_frames / H3_FPS
                 ),
-                duration_seconds=settings.h3_duration_seconds,
+                duration_seconds=host_frames / H3_FPS,
                 width=settings.h3_width,
                 height=settings.h3_height,
                 fps=settings.h3_fps,
-                frames=H3_FRAMES,
+                frames=host_frames,
                 steps=settings.h3_steps,
             )
         )
@@ -154,12 +147,13 @@ def create_h3_jobs(
                     selected_director,
                     selected_palette,
                     scenario.creative.get("intensity", "strong"),
+                    reporter_frames / H3_FPS,
                 ),
-                duration_seconds=settings.h3_duration_seconds,
+                duration_seconds=reporter_frames / H3_FPS,
                 width=settings.h3_width,
                 height=settings.h3_height,
                 fps=settings.h3_fps,
-                frames=H3_FRAMES,
+                frames=reporter_frames,
                 steps=settings.h3_steps,
             )
         )
@@ -190,7 +184,7 @@ def encode_batch(jobs: list[H3Job], run_id: str) -> dict[str, Any]:
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", run_id):
         raise H3RendererError("Identifiant de run invalide pour le batch FastH3.")
     return {
-        "contract_version": 1,
+        "contract_version": 2,
         "run_id": run_id,
         "engine": "FastH3 8-Step V2 / MiniMax H3",
         "config": h3_contract_config(),

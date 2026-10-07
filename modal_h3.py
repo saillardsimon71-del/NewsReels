@@ -18,9 +18,7 @@ from typing import Any
 
 from newsreel.h3_workflow import (
     H3_COMFYUI_REVISION,
-    H3_DURATION_SECONDS,
     H3_FPS,
-    H3_FRAMES,
     H3_HEIGHT,
     H3_MODAL_CPU,
     H3_MODAL_GPU,
@@ -32,6 +30,7 @@ from newsreel.h3_workflow import (
     H3_WIDTH,
     build_h3_api_workflow,
     h3_contract_config,
+    validate_h3_timing,
 )
 
 COMFYUI_DIR = Path(os.getenv("NEWSREEL_COMFYUI_DIR", "/opt/ComfyUI"))
@@ -41,7 +40,7 @@ COMFYUI_REPOSITORY = "https://github.com/Comfy-Org/ComfyUI.git"
 
 
 def validate_batch(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    if payload.get("contract_version") != 1:
+    if payload.get("contract_version") != 2:
         raise ValueError("Version de contrat H3 non prise en charge.")
     if "workflow" in payload:
         raise ValueError(
@@ -68,8 +67,6 @@ def validate_batch(payload: dict[str, Any]) -> list[dict[str, Any]]:
         "width": H3_WIDTH,
         "height": H3_HEIGHT,
         "fps": H3_FPS,
-        "frames": H3_FRAMES,
-        "duration_seconds": H3_DURATION_SECONDS,
         "steps": H3_STEPS,
     }
     seen_ids: set[str] = set()
@@ -89,8 +86,9 @@ def validate_batch(payload: dict[str, Any]) -> list[dict[str, Any]]:
         for key, expected in required_per_job.items():
             if job.get(key) != expected:
                 raise ValueError(f"Paramètre FastH3 requis invalide pour {job_id}: {key}.")
+        validate_h3_timing(job.get("frames"), job.get("duration_seconds"))
         seed = job.get("seed")
-        if not isinstance(seed, int) or not 0 <= seed < 2**53:
+        if type(seed) is not int or not 0 <= seed < 2**64:
             raise ValueError(f"Seed invalide pour le job H3 {job_id}.")
     return jobs
 
